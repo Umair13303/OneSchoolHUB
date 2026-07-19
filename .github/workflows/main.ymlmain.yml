@@ -1,0 +1,27 @@
+name: Build and Deploy to MonsterASP
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build and Publish
+        run: dotnet publish -c Release -o ./publish-out
+
+      - name: Deploy to WebDeploy
+        uses: Azure/webapps-deploy@v3
+        with:
+          publish-profile: ${{ secrets.PUBLISH_PROFILE }}
+          package: ./publish-out
