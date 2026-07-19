@@ -35,9 +35,9 @@ jobs:
       - name: Upload to MonsterASP via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
+          server: ${{ secrets.PUBLISH_URL }}
+          username: ${{ secrets.PUBLISH_USER }}
+          password: ${{ secrets.PUBLISH_PWD }}
           local-dir: ./publish-out/
           server-dir: /wwwroot/
           dangerous-clean-slate: true
