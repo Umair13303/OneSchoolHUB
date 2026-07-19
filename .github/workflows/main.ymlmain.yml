@@ -1,13 +1,11 @@
 name: Build and Deploy to MonsterASP
-
 on:
   push:
     branches: [ main ]
-
 jobs:
   deploy-job:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -18,19 +16,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Publish App
-        # This compiles your raw code into the 'publish-out' folder
         run: dotnet publish -c Release -o ./publish-out
 
-      - name: Stop Application
-        # This creates the 'kill switch' file to unlock the DLLs on the server
-        run: |
-          echo "Site is updating, please wait..." > ./publish-out/app_offline.htm
-
-      - name: Purge Remote wwwroot Directory
-        # Installs standard Linux ftp tools and explicitly wipes out everything in /wwwroot
-        run: |
-          sudo apt-get update && sudo apt-get install -y lftp
-          lftp -e "set ftp:ssl-allow no; open ${{ secrets.PUBLISH_URL }}; user ${{ secrets.PUBLISH_USER }} '${{ secrets.PUBLISH_PWD }}'; glob -a rm -rf /wwwroot/*; quit"
+      - name: Add offline marker
+        run: echo "Site is updating, please wait..." > ./publish-out/app_offline.htm
 
       - name: Upload to MonsterASP via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -38,6 +27,7 @@ jobs:
           server: ${{ secrets.PUBLISH_URL }}
           username: ${{ secrets.PUBLISH_USER }}
           password: ${{ secrets.PUBLISH_PWD }}
+          protocol: ftps
           local-dir: ./publish-out/
           server-dir: /wwwroot/
           dangerous-clean-slate: true
