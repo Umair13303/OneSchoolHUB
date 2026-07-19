@@ -1,0 +1,33 @@
+name: Build and Deploy to MonsterASP
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish App
+        run: dotnet publish -c Release -o ./publish-out
+
+      - name: Add offline marker
+        run: echo "Site is updating, please wait..." > ./publish-out/app_offline.htm
+
+      - name: Upload to MonsterASP via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.PUBLISH_URL }}
+          username: ${{ secrets.PUBLISH_USER }}
+          password: ${{ secrets.PUBLISH_PWD }}
+          protocol: ftps
+          local-dir: ./publish-out/
+          server-dir: /wwwroot/
+          dangerous-clean-slate: true
