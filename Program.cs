@@ -117,18 +117,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowConfiguredOrigins", policy =>
     {
-        if (allowedOrigins.Length > 0)
-        {
-            policy.WithOrigins(allowedOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
-        }
-        // Note: a true native HTTP client wouldn't send an Origin header and
-        // wouldn't need a CORS entry — but the Capacitor mobile app runs its
-        // Angular code in a real Chromium WebView, so its requests DO carry
-        // an Origin header (https://localhost, per capacitor.config.ts's
-        // androidScheme) and ARE subject to CORS just like the web app.
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
