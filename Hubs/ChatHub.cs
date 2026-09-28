@@ -76,7 +76,7 @@ public class ChatHub : Hub
             SenderId       = senderId,
             Content        = content.Trim(),
             SentAt         = DateTime.UtcNow,
-            InstituteId    = instituteId ?? 0
+            InstituteId    = instituteId ?? sender.InstituteId ?? 0
         };
         _db.ChatMessages.Add(msg);
         await _db.SaveChangesAsync();
@@ -92,6 +92,27 @@ public class ChatHub : Hub
             IsRead         = false
         };
 
+        // Ensure all online members are part of the SignalR group
+        var memberUserIds = await _db.ChatConversationMembers
+            .Where(m => m.ConversationId == conversationId)
+            .Select(m => m.UserId)
+            .ToListAsync();
+
+        lock (_lock)
+        {
+            foreach (var uid in memberUserIds)
+            {
+                if (_connections.TryGetValue(uid, out var conns))
+                {
+                    foreach (var connId in conns)
+                    {
+                        _ = Groups.AddToGroupAsync(connId, ConvGroup(conversationId));
+                    }
+                }
+            }
+        }
+
+        // Single clean broadcast to the conversation group
         await Clients.Group(ConvGroup(conversationId)).SendAsync("ReceiveMessage", dto);
     }
 
@@ -105,12 +126,22 @@ public class ChatHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, ConvGroup(conversationId));
     }
 
-    private static string ConvGroup(int convId) => $"conv_{convId}";
+    public static string ConvGroup(int convId) => $"conv_{convId}";
+
+    public static List<string> GetUserConnections(int userId)
+    {
+        lock (_lock)
+        {
+            return _connections.TryGetValue(userId, out var c) ? c.ToList() : new List<string>();
+        }
+    }
 
     private int GetUserId()
     {
         var v = Context.User?.FindFirst("userId")?.Value
-             ?? Context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+             ?? Context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+             ?? Context.User?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value
+             ?? Context.User?.FindFirst("sub")?.Value;
         return int.TryParse(v, out var id) ? id : 0;
     }
 

@@ -31,21 +31,22 @@ public class ChatController : ControllerBase
         var me = GetUserId();
 
         var convs = await _db.ChatConversationMembers
-            .Where(m => m.UserId == me)
+            .Where(m => m.UserId == me && !m.Conversation.IsDeleted)
             .Include(m => m.Conversation)
                 .ThenInclude(c => c.Members)
                     .ThenInclude(cm => cm.User)
                         .ThenInclude(u => u.Role)
             .Include(m => m.Conversation)
-                .ThenInclude(c => c.Messages)
+                .ThenInclude(c => c.Messages.Where(x => !x.IsDeleted))
                     .ThenInclude(msg => msg.Reads)
             .Select(m => m.Conversation)
             .ToListAsync();
 
         var dtos = convs.Select(c =>
         {
-            var lastMsg = c.Messages.OrderByDescending(x => x.SentAt).FirstOrDefault();
-            var unread  = c.Messages.Count(x => x.SenderId != me && !x.Reads.Any(r => r.UserId == me));
+            var validMsgs = c.Messages.Where(x => !x.IsDeleted).ToList();
+            var lastMsg = validMsgs.OrderByDescending(x => x.SentAt).FirstOrDefault();
+            var unread  = validMsgs.Count(x => x.SenderId != me && !x.Reads.Any(r => r.UserId == me));
 
             var otherMember = c.ConversationType == "direct"
                 ? c.Members.FirstOrDefault(m => m.UserId != me)
@@ -61,7 +62,7 @@ public class ChatController : ControllerBase
                 Name             = name,
                 ConversationType = c.ConversationType,
                 ClassId          = c.ClassId,
-                LastMessage      = lastMsg?.Content ?? "",
+                LastMessage      = lastMsg?.Content ?? (lastMsg?.AttachmentName != null ? $"[Attachment: {lastMsg.AttachmentName}]" : ""),
                 LastMessageAt    = lastMsg?.SentAt,
                 UnreadCount      = unread,
                 IsOnline         = otherMember != null && ChatHub.IsOnline(otherMember.UserId),
@@ -76,7 +77,7 @@ public class ChatController : ControllerBase
                 }).ToList()
             };
         })
-        .OrderByDescending(c => c.LastMessageAt)
+        .OrderByDescending(c => c.LastMessageAt ?? DateTime.MinValue)
         .ToList();
 
         return Ok(dtos);
@@ -89,16 +90,20 @@ public class ChatController : ControllerBase
         var me = GetUserId();
         var instituteId = GetInstituteId();
 
+        if (me == 0) return Unauthorized();
+        if (dto.TargetUserId <= 0) return BadRequest("Invalid target user.");
+
         // Check if DM already exists between these two users
         var myConvIds = await _db.ChatConversationMembers
-            .Where(m => m.UserId == me)
+            .Where(m => m.UserId == me && !m.Conversation.IsDeleted)
             .Select(m => m.ConversationId)
             .ToListAsync();
 
         var existing = await _db.ChatConversationMembers
             .Where(m => m.UserId == dto.TargetUserId &&
                    myConvIds.Contains(m.ConversationId) &&
-                   m.Conversation.ConversationType == "direct")
+                   m.Conversation.ConversationType == "direct" &&
+                   !m.Conversation.IsDeleted)
             .Select(m => m.ConversationId)
             .FirstOrDefaultAsync();
 
@@ -114,6 +119,22 @@ public class ChatController : ControllerBase
             new ChatConversationMember { ConversationId = conv.ChatConversationId, UserId = dto.TargetUserId }
         );
         await _db.SaveChangesAsync();
+
+        // Notify both users to join this SignalR conversation group
+        try
+        {
+            var memberUserIds = new[] { me, dto.TargetUserId };
+            foreach (var uid in memberUserIds)
+            {
+                var conns = ChatHub.GetUserConnections(uid);
+                foreach (var connId in conns)
+                {
+                    _ = _hub.Groups.AddToGroupAsync(connId, ChatHub.ConvGroup(conv.ChatConversationId));
+                    _ = _hub.Clients.Client(connId).SendAsync("JoinConversation", conv.ChatConversationId);
+                }
+            }
+        }
+        catch { }
 
         return Ok(new { conversationId = conv.ChatConversationId });
     }
@@ -257,7 +278,7 @@ public class ChatController : ControllerBase
         if (!isMember) return Forbid();
 
         var msgs = await _db.ChatMessages
-            .Where(m => m.ConversationId == id)
+            .Where(m => m.ConversationId == id && !m.IsDeleted)
             .Include(m => m.Sender)
             .Include(m => m.Reads)
             .OrderByDescending(m => m.SentAt)
@@ -300,10 +321,12 @@ public class ChatController : ControllerBase
     {
         var me = GetUserId();
         var myConvIds = await _db.ChatConversationMembers
-            .Where(m => m.UserId == me).Select(m => m.ConversationId).ToListAsync();
+            .Where(m => m.UserId == me && !m.Conversation.IsDeleted)
+            .Select(m => m.ConversationId)
+            .ToListAsync();
 
         var count = await _db.ChatMessages
-            .Where(m => myConvIds.Contains(m.ConversationId) &&
+            .Where(m => myConvIds.Contains(m.ConversationId) && !m.IsDeleted &&
                    m.SenderId != me && !m.Reads.Any(r => r.UserId == me))
             .CountAsync();
 
@@ -317,9 +340,15 @@ public class ChatController : ControllerBase
         var me = GetUserId();
         var instituteId = GetInstituteId();
 
-        var users = await _db.Users
-            .Where(u => !u.IsDeleted && u.InstituteId == instituteId && u.UserId != me)
+        var query = _db.Users.Where(u => !u.IsDeleted && u.UserId != me && u.IsActive);
+        if (instituteId.HasValue && instituteId.Value > 0)
+        {
+            query = query.Where(u => u.InstituteId == instituteId.Value || u.InstituteId == null);
+        }
+
+        var users = await query
             .Include(u => u.Role)
+            .OrderBy(u => u.FullName)
             .Select(u => new ChatUserDto
             {
                 UserId   = u.UserId,
@@ -381,7 +410,7 @@ public class ChatController : ControllerBase
             AttachmentName = dto.AttachmentName,
             AttachmentType = dto.AttachmentType,
             AttachmentSize = dto.AttachmentSize,
-            InstituteId    = GetInstituteId() ?? 0
+            InstituteId    = GetInstituteId() ?? sender?.InstituteId ?? 0
         };
         _db.ChatMessages.Add(msg);
         await _db.SaveChangesAsync();
@@ -401,7 +430,24 @@ public class ChatController : ControllerBase
             AttachmentSize = msg.AttachmentSize
         };
 
-        await _hub.Clients.Group($"conv_{id}").SendAsync("ReceiveMessage", msgDto);
+        // Ensure all online members are part of the SignalR group
+        var memberUserIds = await _db.ChatConversationMembers
+            .Where(m => m.ConversationId == id)
+            .Select(m => m.UserId)
+            .ToListAsync();
+
+        foreach (var uid in memberUserIds)
+        {
+            var conns = ChatHub.GetUserConnections(uid);
+            foreach (var connId in conns)
+            {
+                _ = _hub.Groups.AddToGroupAsync(connId, ChatHub.ConvGroup(id));
+            }
+        }
+
+        // Single clean broadcast to the conversation group
+        await _hub.Clients.Group(ChatHub.ConvGroup(id)).SendAsync("ReceiveMessage", msgDto);
+
         return Ok(msgDto);
     }
 
@@ -444,7 +490,7 @@ public class ChatController : ControllerBase
         await _db.SaveChangesAsync();
 
         // Notify members that message was deleted
-        await _hub.Clients.Group($"conv_{msg.ConversationId}")
+        await _hub.Clients.Group(ChatHub.ConvGroup(msg.ConversationId))
             .SendAsync("MessageDeleted", new { messageId = id, conversationId = msg.ConversationId });
 
         return NoContent();
@@ -452,9 +498,17 @@ public class ChatController : ControllerBase
 
     private int GetUserId()
     {
-        var v = User.FindFirst("userId")?.Value
-             ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(v, out var id) ? id : 0;
+        var claim = User.Claims.FirstOrDefault(c =>
+            c.Type == "userId" ||
+            c.Type == "sub" ||
+            c.Type == System.Security.Claims.ClaimTypes.NameIdentifier ||
+            c.Type.EndsWith("/nameidentifier", StringComparison.OrdinalIgnoreCase) ||
+            c.Type.Equals("nameidentifier", StringComparison.OrdinalIgnoreCase));
+
+        if (claim != null && int.TryParse(claim.Value, out var id) && id > 0)
+            return id;
+
+        return 0;
     }
 
     private int? GetInstituteId()
