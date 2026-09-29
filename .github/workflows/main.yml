@@ -18,9 +18,6 @@ jobs:
       - name: Publish App
         run: dotnet publish -c Release -o ./publish-out
 
-      - name: Add offline marker
-        run: echo "Site is updating, please wait..." > ./publish-out/app_offline.htm
-
       - name: Upload to MonsterASP via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
