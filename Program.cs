@@ -208,20 +208,21 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
 
-// ── Ensure database migrations & Chat tables exist ───────────────────────────
-try
+// ── Background Database initialization (non-blocking for fast IIS startup) ────
+_ = Task.Run(async () =>
 {
-    using var scope = app.Services.CreateScope();
-    if (app.Environment.IsDevelopment())
+    try
     {
-        // Logging DB first: the main DB's migration renames its old ActivityLogs
-        // table away, so the new home must exist before anything writes a log.
-        scope.ServiceProvider.GetRequiredService<LoggingDbContext>().Database.Migrate();
-        scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
-    }
+        await Task.Delay(1000); // Allow server to bind and respond to health probes first
+        using var scope = app.Services.CreateScope();
+        if (app.Environment.IsDevelopment())
+        {
+            await scope.ServiceProvider.GetRequiredService<LoggingDbContext>().Database.MigrateAsync();
+            await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+        }
 
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    const string ensureChatTablesSql = @"
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        const string ensureChatTablesSql = @"
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'ChatConversations')
 BEGIN
     CREATE TABLE ChatConversations (
@@ -287,11 +288,12 @@ BEGIN
         CONSTRAINT FK_ChatMessageReads_Users FOREIGN KEY (UserId) REFERENCES Users(UserId)
     );
 END;";
-    db.Database.ExecuteSqlRaw(ensureChatTablesSql);
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Database initialization warning: {ex.Message}");
-}
+        await db.Database.ExecuteSqlRawAsync(ensureChatTablesSql);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Background database initialization warning: {ex.Message}");
+    }
+});
 
 app.Run();
