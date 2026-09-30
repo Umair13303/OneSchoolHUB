@@ -31,6 +31,7 @@ public class ChatController : ControllerBase
         var me = GetUserId();
 
         var convs = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
             .Where(m => m.UserId == me && !m.Conversation.IsDeleted)
             .Include(m => m.Conversation)
                 .ThenInclude(c => c.Members)
@@ -95,11 +96,13 @@ public class ChatController : ControllerBase
 
         // Check if DM already exists between these two users
         var myConvIds = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
             .Where(m => m.UserId == me && !m.Conversation.IsDeleted)
             .Select(m => m.ConversationId)
             .ToListAsync();
 
         var existing = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
             .Where(m => m.UserId == dto.TargetUserId &&
                    myConvIds.Contains(m.ConversationId) &&
                    m.Conversation.ConversationType == "direct" &&
@@ -109,6 +112,7 @@ public class ChatController : ControllerBase
 
         if (existing != 0)
             return Ok(new { conversationId = existing });
+
 
         var conv = new ChatConversation { ConversationType = "direct", InstituteId = instituteId };
         _db.ChatConversations.Add(conv);
@@ -270,10 +274,13 @@ public class ChatController : ControllerBase
     {
         var me = GetUserId();
 
-        var isMember = await _db.ChatConversationMembers.AnyAsync(m => m.ConversationId == id && m.UserId == me);
+        var isMember = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
+            .AnyAsync(m => m.ConversationId == id && m.UserId == me);
         if (!isMember) return Forbid();
 
         var msgs = await _db.ChatMessages
+            .IgnoreQueryFilters()
             .Where(m => m.ConversationId == id && !m.IsDeleted)
             .Include(m => m.Sender)
             .Include(m => m.Reads)
@@ -317,11 +324,13 @@ public class ChatController : ControllerBase
     {
         var me = GetUserId();
         var myConvIds = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
             .Where(m => m.UserId == me && !m.Conversation.IsDeleted)
             .Select(m => m.ConversationId)
             .ToListAsync();
 
         var count = await _db.ChatMessages
+            .IgnoreQueryFilters()
             .Where(m => myConvIds.Contains(m.ConversationId) && !m.IsDeleted &&
                    m.SenderId != me && !m.Reads.Any(r => r.UserId == me))
             .CountAsync();
@@ -336,7 +345,7 @@ public class ChatController : ControllerBase
         var me = GetUserId();
         var instituteId = GetInstituteId();
 
-        var query = _db.Users.Where(u => !u.IsDeleted && u.UserId != me && u.IsActive);
+        var query = _db.Users.IgnoreQueryFilters().Where(u => !u.IsDeleted && u.UserId != me && u.IsActive);
         if (instituteId.HasValue && instituteId.Value > 0)
         {
             query = query.Where(u => u.InstituteId == instituteId.Value || u.InstituteId == null);
@@ -391,10 +400,12 @@ public class ChatController : ControllerBase
     {
         var me = GetUserId();
         var member = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(m => m.ConversationId == id && m.UserId == me);
         if (member == null) return Forbid();
 
-        var sender = await _db.Users.FindAsync(me);
+        var sender = await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.UserId == me);
+
 
         var msg = new ChatMessage
         {

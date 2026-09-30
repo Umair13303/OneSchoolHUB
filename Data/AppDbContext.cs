@@ -211,7 +211,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<ChatConversation>().HasKey(c => c.ChatConversationId);
         modelBuilder.Entity<ChatConversation>()
-            .HasQueryFilter(c => !c.IsDeleted && (IsSuperAdmin || c.InstituteId == null || c.InstituteId == TenantId));
+            .HasQueryFilter(c => !c.IsDeleted);
 
         modelBuilder.Entity<ChatConversationMember>().HasKey(m => m.MemberId);
         modelBuilder.Entity<ChatConversationMember>()
@@ -221,11 +221,12 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<ChatMessage>().HasKey(m => m.ChatMessageId);
         modelBuilder.Entity<ChatMessage>()
-            .HasQueryFilter(m => !m.IsDeleted && (IsSuperAdmin || m.InstituteId == null || m.InstituteId == TenantId));
+            .HasQueryFilter(m => !m.IsDeleted);
         modelBuilder.Entity<ChatMessage>()
             .HasOne(m => m.Sender).WithMany().HasForeignKey(m => m.SenderId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ChatMessage>()
             .HasOne(m => m.Conversation).WithMany(c => c.Messages).HasForeignKey(m => m.ConversationId).OnDelete(DeleteBehavior.Cascade);
+
 
         modelBuilder.Entity<ChatMessageRead>().HasKey(r => r.ReadId);
         modelBuilder.Entity<ChatMessageRead>()

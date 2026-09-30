@@ -34,7 +34,8 @@ public class ChatHub : Hub
 
         // Join SignalR groups for all conversations this user is part of
         var convIds = await _db.ChatConversationMembers
-            .Where(m => m.UserId == userId)
+            .IgnoreQueryFilters()
+            .Where(m => m.UserId == userId && !m.Conversation.IsDeleted)
             .Select(m => m.ConversationId)
             .ToListAsync();
         foreach (var cid in convIds)
@@ -64,10 +65,11 @@ public class ChatHub : Hub
         if (senderId == 0 || string.IsNullOrWhiteSpace(content)) return;
 
         var isMember = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
             .AnyAsync(m => m.ConversationId == conversationId && m.UserId == senderId);
         if (!isMember) return;
 
-        var sender = await _db.Users.FindAsync(senderId);
+        var sender = await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.UserId == senderId);
         if (sender == null) return;
 
         var msg = new ChatMessage
@@ -94,6 +96,7 @@ public class ChatHub : Hub
 
         // Ensure all online members are part of the SignalR group
         var memberUserIds = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
             .Where(m => m.ConversationId == conversationId)
             .Select(m => m.UserId)
             .ToListAsync();
@@ -111,10 +114,12 @@ public class ChatHub : Hub
     {
         var userId = GetUserId();
         var isMember = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
             .AnyAsync(m => m.ConversationId == conversationId && m.UserId == userId);
         if (isMember)
             await Groups.AddToGroupAsync(Context.ConnectionId, ConvGroup(conversationId));
     }
+
 
     public static string ConvGroup(int convId) => $"conv_{convId}";
 
