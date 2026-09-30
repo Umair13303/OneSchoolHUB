@@ -126,18 +126,14 @@ public class ChatController : ControllerBase
             var memberUserIds = new[] { me, dto.TargetUserId };
             foreach (var uid in memberUserIds)
             {
-                var conns = ChatHub.GetUserConnections(uid);
-                foreach (var connId in conns)
-                {
-                    _ = _hub.Groups.AddToGroupAsync(connId, ChatHub.ConvGroup(conv.ChatConversationId));
-                    _ = _hub.Clients.Client(connId).SendAsync("JoinConversation", conv.ChatConversationId);
-                }
+                await _hub.Clients.User(uid.ToString()).SendAsync("JoinConversation", conv.ChatConversationId);
             }
         }
         catch { }
 
         return Ok(new { conversationId = conv.ChatConversationId });
     }
+
 
     // ── POST /api/chat/groups ───────────────────────────────────────────────
     [HttpPost("groups")]
@@ -436,20 +432,15 @@ public class ChatController : ControllerBase
             .Select(m => m.UserId)
             .ToListAsync();
 
-        foreach (var uid in memberUserIds)
-        {
-            var conns = ChatHub.GetUserConnections(uid);
-            foreach (var connId in conns)
-            {
-                _ = _hub.Groups.AddToGroupAsync(connId, ChatHub.ConvGroup(id));
-            }
-        }
+        var targetUserIds = memberUserIds.Select(u => u.ToString()).ToList();
 
-        // Single clean broadcast to the conversation group
+        // Broadcast to all conversation member user accounts and the group
+        await _hub.Clients.Users(targetUserIds).SendAsync("ReceiveMessage", msgDto);
         await _hub.Clients.Group(ChatHub.ConvGroup(id)).SendAsync("ReceiveMessage", msgDto);
 
         return Ok(msgDto);
     }
+
 
     // ── DELETE /api/chat/conversations/{id} ────────────────────────────────
     [HttpDelete("conversations/{id:int}")]
@@ -490,11 +481,20 @@ public class ChatController : ControllerBase
         await _db.SaveChangesAsync();
 
         // Notify members that message was deleted
+        var memberUserIds = await _db.ChatConversationMembers
+            .Where(m => m.ConversationId == msg.ConversationId)
+            .Select(m => m.UserId)
+            .ToListAsync();
+        var targetUserIds = memberUserIds.Select(u => u.ToString()).ToList();
+
+        await _hub.Clients.Users(targetUserIds)
+            .SendAsync("MessageDeleted", new { messageId = id, conversationId = msg.ConversationId });
         await _hub.Clients.Group(ChatHub.ConvGroup(msg.ConversationId))
             .SendAsync("MessageDeleted", new { messageId = id, conversationId = msg.ConversationId });
 
         return NoContent();
     }
+
 
     private int GetUserId()
     {

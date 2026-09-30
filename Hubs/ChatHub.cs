@@ -98,23 +98,13 @@ public class ChatHub : Hub
             .Select(m => m.UserId)
             .ToListAsync();
 
-        lock (_lock)
-        {
-            foreach (var uid in memberUserIds)
-            {
-                if (_connections.TryGetValue(uid, out var conns))
-                {
-                    foreach (var connId in conns)
-                    {
-                        _ = Groups.AddToGroupAsync(connId, ConvGroup(conversationId));
-                    }
-                }
-            }
-        }
+        var targetUserIds = memberUserIds.Select(u => u.ToString()).ToList();
 
-        // Single clean broadcast to the conversation group
+        // Broadcast to all conversation member user accounts and the group
+        await Clients.Users(targetUserIds).SendAsync("ReceiveMessage", dto);
         await Clients.Group(ConvGroup(conversationId)).SendAsync("ReceiveMessage", dto);
     }
+
 
     // Called when a new group is created so all members join the SignalR group
     public async Task JoinConversation(int conversationId)

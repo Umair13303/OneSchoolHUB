@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.SignalR;
 using QuestPDF.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -10,6 +11,7 @@ using SchoolManagement.API.Helpers;
 using SchoolManagement.API.Services;
 using SchoolManagement.API.Hubs;
 using System.Text;
+
 
 QuestPDF.Settings.License = LicenseType.Community;
 
@@ -51,15 +53,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.Zero
         };
-        // SignalR sends token via query string instead of Authorization header
+        // SignalR sends token via query string or header
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = ctx =>
             {
-                var token = ctx.Request.Query["access_token"];
-                if (!string.IsNullOrEmpty(token) &&
-                    ctx.Request.Path.StartsWithSegments("/hubs/chat"))
-                    ctx.Token = token;
+                var accessToken = ctx.Request.Query["access_token"].ToString();
+                var path = ctx.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    (path.StartsWithSegments("/hubs/chat", StringComparison.OrdinalIgnoreCase) ||
+                     path.Value?.IndexOf("/hubs/chat", StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    ctx.Token = accessToken;
+                }
                 return Task.CompletedTask;
             }
         };
@@ -67,6 +73,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<IUserIdProvider, CustomUserIdProvider>();
+
 
 // ── Services ──────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<JwtHelper>();
