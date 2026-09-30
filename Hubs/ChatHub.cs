@@ -24,7 +24,11 @@ public class ChatHub : Hub
     public override async Task OnConnectedAsync()
     {
         var userId = GetUserId();
-        if (userId == 0) return;
+        if (userId == 0)
+        {
+            Context.Abort();
+            return;
+        }
 
         lock (_lock)
         {
@@ -41,20 +45,28 @@ public class ChatHub : Hub
         foreach (var cid in convIds)
             await Groups.AddToGroupAsync(Context.ConnectionId, ConvGroup(cid));
 
+        await BroadcastPresence(userId, true);
         await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var userId = GetUserId();
+        var wentOffline = false;
         lock (_lock)
         {
             if (_connections.TryGetValue(userId, out var c))
             {
                 c.Remove(Context.ConnectionId);
-                if (c.Count == 0) _connections.Remove(userId);
+                if (c.Count == 0)
+                {
+                    _connections.Remove(userId);
+                    wentOffline = true;
+                }
             }
         }
+        if (userId > 0 && wentOffline)
+            await BroadcastPresence(userId, false);
         await base.OnDisconnectedAsync(exception);
     }
 
@@ -62,7 +74,9 @@ public class ChatHub : Hub
     {
         var senderId    = GetUserId();
         var instituteId = GetInstituteId();
-        if (senderId == 0 || string.IsNullOrWhiteSpace(content)) return;
+        if (senderId == 0)
+            throw new HubException("Not authenticated.");
+        if (string.IsNullOrWhiteSpace(content)) return;
 
         var isMember = await _db.ChatConversationMembers
             .IgnoreQueryFilters()
@@ -120,6 +134,26 @@ public class ChatHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, ConvGroup(conversationId));
     }
 
+
+    private async Task BroadcastPresence(int userId, bool isOnline)
+    {
+        var convIds = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
+            .Where(m => m.UserId == userId && !m.Conversation.IsDeleted)
+            .Select(m => m.ConversationId)
+            .ToListAsync();
+        if (convIds.Count == 0) return;
+
+        var peerIds = await _db.ChatConversationMembers
+            .IgnoreQueryFilters()
+            .Where(m => convIds.Contains(m.ConversationId))
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        await Clients.Users(peerIds.Select(id => id.ToString()).ToList())
+            .SendAsync("UserPresence", new { userId, isOnline });
+    }
 
     public static string ConvGroup(int convId) => $"conv_{convId}";
 

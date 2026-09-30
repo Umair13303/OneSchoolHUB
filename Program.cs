@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR;
 using QuestPDF.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -59,10 +60,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             OnMessageReceived = ctx =>
             {
                 var accessToken = ctx.Request.Query["access_token"].ToString();
+                if (string.IsNullOrEmpty(accessToken))
+                    accessToken = ctx.Request.Headers.Authorization.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
                 var path = ctx.HttpContext.Request.Path;
                 if (!string.IsNullOrEmpty(accessToken) &&
-                    (path.StartsWithSegments("/hubs/chat", StringComparison.OrdinalIgnoreCase) ||
-                     path.Value?.IndexOf("/hubs/chat", StringComparison.OrdinalIgnoreCase) >= 0))
+                    (path.StartsWithSegments("/hubs", StringComparison.OrdinalIgnoreCase) ||
+                     path.Value?.Contains("/hubs/", StringComparison.OrdinalIgnoreCase) == true))
                 {
                     ctx.Token = accessToken;
                 }
@@ -72,7 +75,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+});
 builder.Services.AddSingleton<IUserIdProvider, CustomUserIdProvider>();
 
 
@@ -214,7 +222,12 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<ChatHub>("/hubs/chat", options =>
+{
+    options.Transports = HttpTransportType.WebSockets
+                       | HttpTransportType.ServerSentEvents
+                       | HttpTransportType.LongPolling;
+});
 
 // ── Background Database initialization (non-blocking for fast IIS startup) ────
 _ = Task.Run(async () =>
