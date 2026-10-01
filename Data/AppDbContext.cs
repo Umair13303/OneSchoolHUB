@@ -546,9 +546,10 @@ public class AppDbContext : DbContext
             new MenuItem { MenuItemId = 27, ParentId = 3,    Title = "Teacher Assignments",   Icon = "assignment_ind", RouteUrl = "/academics/teacher-assignments",  SortOrder = 34, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
 
             // Students children
-            new MenuItem { MenuItemId = 7,  ParentId = 6,    Title = "New Admission",      Icon = "person_add",     RouteUrl = "/students/new",  SortOrder = 41, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
-            new MenuItem { MenuItemId = 52, ParentId = 6,    Title = "Add Student",        Icon = "person_add_alt", RouteUrl = "/students/add",  SortOrder = 42, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
-            new MenuItem { MenuItemId = 8,  ParentId = 6,    Title = "Student List",       Icon = "list",           RouteUrl = "/students/list", SortOrder = 43, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 7,  ParentId = 6,    Title = "New Admission",      Icon = "person_add",     RouteUrl = "/students/new",    SortOrder = 41, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 52, ParentId = 6,    Title = "Add Student",        Icon = "person_add_alt", RouteUrl = "/students/add",    SortOrder = 42, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 53, ParentId = 6,    Title = "Import Students",    Icon = "upload_file",    RouteUrl = "/students/import", SortOrder = 43, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 8,  ParentId = 6,    Title = "Student List",       Icon = "list",           RouteUrl = "/students/list",   SortOrder = 44, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
 
             // Timetable children
             new MenuItem { MenuItemId = 10, ParentId = 9,    Title = "Timetable Setup",    Icon = "edit_calendar", RouteUrl = "/timetable/setup", SortOrder = 51, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
@@ -597,13 +598,15 @@ public class AppDbContext : DbContext
             new MenuRolePermission { Id = 12, MenuItemId = 4, RoleId = 2 },
             new MenuRolePermission { Id = 14, MenuItemId = 5, RoleId = 2 },
 
-            // Students (6,7,50,8) → SuperAdmin, Admin, Principal
+            // Students (6,7,52,53,8) → Admin, Principal
             new MenuRolePermission { Id = 16, MenuItemId = 6,  RoleId = 2 },
             new MenuRolePermission { Id = 17, MenuItemId = 6,  RoleId = 3 },
             new MenuRolePermission { Id = 19, MenuItemId = 7,  RoleId = 2 },
             new MenuRolePermission { Id = 20, MenuItemId = 7,  RoleId = 3 },
             new MenuRolePermission { Id = 141, MenuItemId = 52, RoleId = 2 },
             new MenuRolePermission { Id = 142, MenuItemId = 52, RoleId = 3 },
+            new MenuRolePermission { Id = 201, MenuItemId = 53, RoleId = 2 },
+            new MenuRolePermission { Id = 202, MenuItemId = 53, RoleId = 3 },
             new MenuRolePermission { Id = 22, MenuItemId = 8,  RoleId = 2 },
             new MenuRolePermission { Id = 23, MenuItemId = 8,  RoleId = 3 },
 
