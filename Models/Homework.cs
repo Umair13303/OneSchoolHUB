@@ -11,10 +11,13 @@ public class Homework : BaseEntity
     public DateOnly AssignedDate { get; set; }
     public DateOnly DueDate { get; set; }
     public int? FileId { get; set; }
+    /// <summary>Optional link to a curriculum topic (e.g. homework created from Daily Teaching).</summary>
+    public int? CourseTopicId { get; set; }
 
     public Class Class { get; set; } = null!;
     public Subject Subject { get; set; } = null!;
     public User Teacher { get; set; } = null!;
     public FileStore? File { get; set; }
+    public CourseTopic? CourseTopic { get; set; }
     public ICollection<HomeworkSubmission> Submissions { get; set; } = new List<HomeworkSubmission>();
 }

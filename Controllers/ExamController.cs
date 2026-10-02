@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchoolManagement.API.DTOs.Assessment;
 using SchoolManagement.API.DTOs.Exam;
 using SchoolManagement.API.Models;
 using SchoolManagement.API.Services;
@@ -331,6 +332,63 @@ public class ExamController : ControllerBase
             var list = await _service.SavePaperQuestionsAsync(dto, CurrentUserId());
             return Ok(list);
         }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpGet("papers/{paperId}/syllabus")]
+    [Authorize(Roles = "admin,principal,teacher")]
+    public async Task<IActionResult> GetSyllabus(int paperId)
+    {
+        try { return Ok(await _service.GetSyllabusAsync(paperId)); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPut("papers/{paperId}/syllabus")]
+    [Authorize(Roles = "admin,principal,teacher")]
+    public async Task<IActionResult> SaveSyllabus(int paperId, [FromBody] SaveExamSyllabusDto dto)
+    {
+        try { return Ok(await _service.SaveSyllabusAsync(paperId, dto, CurrentUserId())); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpGet("question-bank")]
+    [Authorize(Roles = "admin,principal,teacher")]
+    public async Task<IActionResult> ListQuestionBank([FromQuery] int? topicId, [FromQuery] string? search, [FromQuery] bool? activeOnly)
+        => Ok(await _service.ListQuestionBankAsync(topicId, search, activeOnly));
+
+    [HttpPost("question-bank")]
+    [Authorize(Roles = "admin,principal,teacher")]
+    public async Task<IActionResult> CreateQuestionBank([FromBody] CreateQuestionBankItemDto dto)
+    {
+        try { return Ok(await _service.CreateQuestionBankItemAsync(dto, CurrentUserId())); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPut("question-bank/{id:int}")]
+    [Authorize(Roles = "admin,principal,teacher")]
+    public async Task<IActionResult> UpdateQuestionBank(int id, [FromBody] UpdateQuestionBankItemDto dto)
+    {
+        try
+        {
+            var ok = await _service.UpdateQuestionBankItemAsync(id, dto, CurrentUserId());
+            return ok ? Ok(new { message = "Updated." }) : NotFound();
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpDelete("question-bank/{id:int}")]
+    [Authorize(Roles = "admin,principal,teacher")]
+    public async Task<IActionResult> DeleteQuestionBank(int id)
+    {
+        var ok = await _service.DeleteQuestionBankItemAsync(id, CurrentUserId());
+        return ok ? Ok(new { message = "Deleted." }) : NotFound();
+    }
+
+    [HttpPost("question-bank/copy-to-paper")]
+    [Authorize(Roles = "admin,principal,teacher")]
+    public async Task<IActionResult> CopyBankToPaper([FromBody] CopyQuestionBankToPaperDto dto)
+    {
+        try { return Ok(await _service.CopyQuestionBankToPaperAsync(dto, CurrentUserId())); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 

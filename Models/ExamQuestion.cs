@@ -59,9 +59,13 @@ public class ExamQuestion : BaseEntity
     /// <summary>e.g. "Attempt any one" on long questions.</summary>
     public string? QuestionNote { get; set; }
 
+    /// <summary>Optional link to Course Content topic (syllabus tagging).</summary>
+    public int? CourseTopicId { get; set; }
+
     // ── Navigation ────────────────────────────────────────────────────────────
     public ExamPaper        ExamPaper       { get; set; } = null!;
     public ExamPaperSection? ExamPaperSection { get; set; }
+    public CourseTopic? CourseTopic { get; set; }
 
     /// <summary>MCQ options — populated for MultipleChoice type.</summary>
     public ICollection<ExamQuestionOption> Options { get; set; } = new List<ExamQuestionOption>();

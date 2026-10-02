@@ -3,363 +3,311 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-#pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
-
 namespace SchoolManagement.API.Migrations
 {
     /// <inheritdoc />
-    public partial class AddImportStudentsMenu : Migration
+    public partial class AddCourseMaterialContent : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Ensure Add Student exists on DBs that missed prior seed rows.
-            migrationBuilder.Sql(@"
-SET IDENTITY_INSERT MenuItems ON;
-IF NOT EXISTS (SELECT 1 FROM MenuItems WHERE MenuItemId = 52)
-INSERT INTO MenuItems (MenuItemId, ParentId, Title, Icon, RouteUrl, SortOrder, IsActive, IsDeleted, CreatedAt)
-VALUES (52, 6, N'Add Student', N'person_add_alt', N'/students/add', 42, 1, 0, '2025-01-01');
-IF NOT EXISTS (SELECT 1 FROM MenuItems WHERE MenuItemId = 53)
-INSERT INTO MenuItems (MenuItemId, ParentId, Title, Icon, RouteUrl, SortOrder, IsActive, IsDeleted, CreatedAt)
-VALUES (53, 6, N'Import Students', N'upload_file', N'/students/import', 43, 1, 0, '2025-01-01');
-SET IDENTITY_INSERT MenuItems OFF;
-
-SET IDENTITY_INSERT MenuRolePermissions ON;
-IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 52 AND RoleId = 2)
-INSERT INTO MenuRolePermissions (Id, MenuItemId, RoleId) VALUES (141, 52, 2);
-IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 52 AND RoleId = 3)
-INSERT INTO MenuRolePermissions (Id, MenuItemId, RoleId) VALUES (142, 52, 3);
-IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 53 AND RoleId = 2)
-INSERT INTO MenuRolePermissions (Id, MenuItemId, RoleId) VALUES (201, 53, 2);
-IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 53 AND RoleId = 3)
-INSERT INTO MenuRolePermissions (Id, MenuItemId, RoleId) VALUES (202, 53, 3);
-SET IDENTITY_INSERT MenuRolePermissions OFF;
-");
+            migrationBuilder.AddColumn<string>(
+                name: "Content",
+                table: "CourseMaterials",
+                type: "nvarchar(max)",
+                nullable: true);
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 1,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 6, DateTimeKind.Utc).AddTicks(969));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(1653));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 2,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 6, DateTimeKind.Utc).AddTicks(2229));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4028));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 3,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 6, DateTimeKind.Utc).AddTicks(2231));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4036));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 4,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 6, DateTimeKind.Utc).AddTicks(2233));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4038));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 5,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 6, DateTimeKind.Utc).AddTicks(2234));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4040));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 6,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 6, DateTimeKind.Utc).AddTicks(2236));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4042));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 7,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 6, DateTimeKind.Utc).AddTicks(2237));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4044));
 
-            migrationBuilder.UpdateData(
-                table: "MenuItems",
-                keyColumn: "MenuItemId",
-                keyValue: 8,
-                column: "SortOrder",
-                value: 44);
-
-            // MenuItem 53 + role permissions already seeded via IF NOT EXISTS SQL at top of Up().
-            // Avoid InsertData which fails when rows were applied manually.
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 1,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 333, DateTimeKind.Utc).AddTicks(682));
+                value: new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(3447));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 2,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 333, DateTimeKind.Utc).AddTicks(2672));
+                value: new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6254));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 3,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 333, DateTimeKind.Utc).AddTicks(2677));
+                value: new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6261));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 4,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 333, DateTimeKind.Utc).AddTicks(2679));
+                value: new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6263));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 5,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 333, DateTimeKind.Utc).AddTicks(2681));
+                value: new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6265));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 6,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 333, DateTimeKind.Utc).AddTicks(2682));
+                value: new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6267));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 7,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 333, DateTimeKind.Utc).AddTicks(2713));
+                value: new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6268));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 1,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 18, DateTimeKind.Utc).AddTicks(7446));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(4533));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 2,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 18, DateTimeKind.Utc).AddTicks(8445));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5536));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 3,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 18, DateTimeKind.Utc).AddTicks(8449));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5540));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 4,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 18, DateTimeKind.Utc).AddTicks(8465));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5542));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 5,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 18, DateTimeKind.Utc).AddTicks(8466));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5544));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 6,
                 column: "CreatedAt",
-                value: new DateTime(2026, 10, 1, 19, 14, 13, 18, DateTimeKind.Utc).AddTicks(8467));
+                value: new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5545));
 
-            // Intentionally skip PasswordHash seed updates (would reset superadmin password).
-            // MenuItem 53 + role permissions already seeded via IF NOT EXISTS SQL at top of Up().
+            // Skip PasswordHash seed updates.
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DeleteData(
-                table: "MenuRolePermissions",
-                keyColumn: "Id",
-                keyValue: 201);
-
-            migrationBuilder.DeleteData(
-                table: "MenuRolePermissions",
-                keyColumn: "Id",
-                keyValue: 202);
-
-            migrationBuilder.DeleteData(
-                table: "MenuItems",
-                keyColumn: "MenuItemId",
-                keyValue: 53);
+            migrationBuilder.DropColumn(
+                name: "Content",
+                table: "CourseMaterials");
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 1,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 34, 996, DateTimeKind.Utc).AddTicks(9353));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 79, DateTimeKind.Utc).AddTicks(9133));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 2,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 34, 997, DateTimeKind.Utc).AddTicks(571));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 80, DateTimeKind.Utc).AddTicks(205));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 3,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 34, 997, DateTimeKind.Utc).AddTicks(574));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 80, DateTimeKind.Utc).AddTicks(207));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 4,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 34, 997, DateTimeKind.Utc).AddTicks(576));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 80, DateTimeKind.Utc).AddTicks(208));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 5,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 34, 997, DateTimeKind.Utc).AddTicks(613));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 80, DateTimeKind.Utc).AddTicks(210));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 6,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 34, 997, DateTimeKind.Utc).AddTicks(615));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 80, DateTimeKind.Utc).AddTicks(211));
 
             migrationBuilder.UpdateData(
                 table: "CalendarEventTypes",
                 keyColumn: "CalendarEventTypeId",
                 keyValue: 7,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 34, 997, DateTimeKind.Utc).AddTicks(618));
-
-            migrationBuilder.UpdateData(
-                table: "MenuItems",
-                keyColumn: "MenuItemId",
-                keyValue: 8,
-                column: "SortOrder",
-                value: 43);
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 80, DateTimeKind.Utc).AddTicks(212));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 1,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 295, DateTimeKind.Utc).AddTicks(7704));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 316, DateTimeKind.Utc).AddTicks(7891));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 2,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 295, DateTimeKind.Utc).AddTicks(9501));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 316, DateTimeKind.Utc).AddTicks(9343));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 3,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 295, DateTimeKind.Utc).AddTicks(9506));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 316, DateTimeKind.Utc).AddTicks(9348));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 4,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 295, DateTimeKind.Utc).AddTicks(9508));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 316, DateTimeKind.Utc).AddTicks(9349));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 5,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 295, DateTimeKind.Utc).AddTicks(9510));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 316, DateTimeKind.Utc).AddTicks(9351));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 6,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 295, DateTimeKind.Utc).AddTicks(9512));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 316, DateTimeKind.Utc).AddTicks(9376));
 
             migrationBuilder.UpdateData(
                 table: "Periods",
                 keyColumn: "PeriodId",
                 keyValue: 7,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 295, DateTimeKind.Utc).AddTicks(9513));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 316, DateTimeKind.Utc).AddTicks(9378));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 1,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 15, DateTimeKind.Utc).AddTicks(3503));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 89, DateTimeKind.Utc).AddTicks(7620));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 2,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 15, DateTimeKind.Utc).AddTicks(4526));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 89, DateTimeKind.Utc).AddTicks(8407));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 3,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 15, DateTimeKind.Utc).AddTicks(4531));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 89, DateTimeKind.Utc).AddTicks(8410));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 4,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 15, DateTimeKind.Utc).AddTicks(4533));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 89, DateTimeKind.Utc).AddTicks(8411));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 5,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 15, DateTimeKind.Utc).AddTicks(4534));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 89, DateTimeKind.Utc).AddTicks(8412));
 
             migrationBuilder.UpdateData(
                 table: "Roles",
                 keyColumn: "RoleId",
                 keyValue: 6,
                 column: "CreatedAt",
-                value: new DateTime(2026, 7, 10, 17, 26, 35, 15, DateTimeKind.Utc).AddTicks(4559));
+                value: new DateTime(2026, 10, 1, 20, 3, 29, 89, DateTimeKind.Utc).AddTicks(8413));
 
-            migrationBuilder.UpdateData(
-                table: "Users",
-                keyColumn: "UserId",
-                keyValue: 1,
-                column: "PasswordHash",
-                value: "$2a$11$3jM9Qr.SrI0bwMZMEmcL3.TSIv8INFG6CSBd3lLTftvx16q/t9oP.");
+            // Skip PasswordHash seed rollback.
         }
     }
 }

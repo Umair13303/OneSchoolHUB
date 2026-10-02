@@ -66,6 +66,7 @@ public class InstituteController : ControllerBase
                 ModuleTimetable  = i.ModuleTimetable,
                 ModuleHR         = i.ModuleHR,
                 ModuleReports    = i.ModuleReports,
+                ModuleCurriculum = i.ModuleCurriculum,
                 CampusCount      = i.Campuses.Count(c => !c.IsDeleted),
                 ChallanTemplate  = i.ChallanTemplate,
                 SchoolStampUrl   = i.SchoolStampUrl,
@@ -100,6 +101,7 @@ public class InstituteController : ControllerBase
             ModuleTimetable  = i.ModuleTimetable,
             ModuleHR         = i.ModuleHR,
             ModuleReports    = i.ModuleReports,
+            ModuleCurriculum = i.ModuleCurriculum,
             CampusCount      = i.Campuses.Count(c => !c.IsDeleted),
             ChallanTemplate  = i.ChallanTemplate,
             SchoolStampUrl   = i.SchoolStampUrl,
@@ -125,6 +127,7 @@ public class InstituteController : ControllerBase
             ModuleTimetable  = dto.ModuleTimetable,
             ModuleHR         = dto.ModuleHR,
             ModuleReports    = dto.ModuleReports,
+            ModuleCurriculum = dto.ModuleCurriculum,
             IsActive         = true
         };
         _db.Institutes.Add(institute);
@@ -152,6 +155,7 @@ public class InstituteController : ControllerBase
         institute.ModuleTimetable  = dto.ModuleTimetable;
         institute.ModuleHR         = dto.ModuleHR;
         institute.ModuleReports    = dto.ModuleReports;
+        institute.ModuleCurriculum = dto.ModuleCurriculum;
         institute.UpdatedAt        = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -171,6 +175,7 @@ public class InstituteController : ControllerBase
         institute.ModuleTimetable  = dto.ModuleTimetable;
         institute.ModuleHR         = dto.ModuleHR;
         institute.ModuleReports    = dto.ModuleReports;
+        institute.ModuleCurriculum = dto.ModuleCurriculum;
         institute.UpdatedAt        = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();

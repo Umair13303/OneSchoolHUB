@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SchoolManagement.API.Data;
 
@@ -11,9 +12,11 @@ using SchoolManagement.API.Data;
 namespace SchoolManagement.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002184458_AddClassroomAssessmentAndExamSyllabus")]
+    partial class AddClassroomAssessmentAndExamSyllabus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -334,7 +337,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 1,
                             Color = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(5564),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 637, DateTimeKind.Utc).AddTicks(4446),
                             Icon = "beach_access",
                             IsDeleted = false,
                             Name = "Annual Holiday",
@@ -344,7 +347,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 2,
                             Color = "#dc2626",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6842),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 637, DateTimeKind.Utc).AddTicks(5273),
                             Icon = "flag",
                             IsDeleted = false,
                             Name = "Gazetted Holiday",
@@ -354,7 +357,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 3,
                             Color = "#d97706",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6844),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 637, DateTimeKind.Utc).AddTicks(5274),
                             Icon = "sports_soccer",
                             IsDeleted = false,
                             Name = "Sports Day",
@@ -364,7 +367,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 4,
                             Color = "#0891b2",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6846),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 637, DateTimeKind.Utc).AddTicks(5275),
                             Icon = "quiz",
                             IsDeleted = false,
                             Name = "Short Term Exam",
@@ -374,7 +377,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 5,
                             Color = "#059669",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6848),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 637, DateTimeKind.Utc).AddTicks(5276),
                             Icon = "school",
                             IsDeleted = false,
                             Name = "Final Exam",
@@ -384,7 +387,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 6,
                             Color = "#ea580c",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6849),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 637, DateTimeKind.Utc).AddTicks(5278),
                             Icon = "emoji_events",
                             IsDeleted = false,
                             Name = "Result Day",
@@ -394,7 +397,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 7,
                             Color = "#6b7280",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6851),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 637, DateTimeKind.Utc).AddTicks(5279),
                             Icon = "event",
                             IsDeleted = false,
                             Name = "Other",
@@ -770,8 +773,7 @@ namespace SchoolManagement.API.Migrations
                         .HasColumnType("bit");
 
                     b.Property<decimal?>("ObtainedMarks")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Remarks")
                         .HasColumnType("nvarchar(max)");
@@ -3063,18 +3065,6 @@ namespace SchoolManagement.API.Migrations
                         },
                         new
                         {
-                            MenuItemId = 58,
-                            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Icon = "library_books",
-                            IsActive = true,
-                            IsDeleted = false,
-                            ParentId = 34,
-                            RouteUrl = "/exams/question-bank",
-                            SortOrder = 67,
-                            Title = "Question Bank"
-                        },
-                        new
-                        {
                             MenuItemId = 36,
                             CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Icon = "calendar_month",
@@ -3711,24 +3701,6 @@ namespace SchoolManagement.API.Migrations
                         },
                         new
                         {
-                            Id = 211,
-                            MenuItemId = 58,
-                            RoleId = 2
-                        },
-                        new
-                        {
-                            Id = 212,
-                            MenuItemId = 58,
-                            RoleId = 3
-                        },
-                        new
-                        {
-                            Id = 213,
-                            MenuItemId = 58,
-                            RoleId = 4
-                        },
-                        new
-                        {
                             Id = 114,
                             MenuItemId = 36,
                             RoleId = 2
@@ -3996,7 +3968,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 1,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(5694),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 811, DateTimeKind.Utc).AddTicks(4764),
                             EndTime = new TimeOnly(8, 40, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4008,7 +3980,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 2,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9278),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 811, DateTimeKind.Utc).AddTicks(5839),
                             EndTime = new TimeOnly(9, 20, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4020,7 +3992,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 3,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9286),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 811, DateTimeKind.Utc).AddTicks(5842),
                             EndTime = new TimeOnly(10, 0, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4032,7 +4004,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 4,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9289),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 811, DateTimeKind.Utc).AddTicks(5843),
                             EndTime = new TimeOnly(10, 20, 0),
                             IsActive = true,
                             IsBreak = true,
@@ -4044,7 +4016,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 5,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9330),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 811, DateTimeKind.Utc).AddTicks(5866),
                             EndTime = new TimeOnly(11, 0, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4056,7 +4028,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 6,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9332),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 811, DateTimeKind.Utc).AddTicks(5867),
                             EndTime = new TimeOnly(11, 40, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4068,7 +4040,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 7,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9335),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 811, DateTimeKind.Utc).AddTicks(5868),
                             EndTime = new TimeOnly(12, 20, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4557,42 +4529,42 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             RoleId = 1,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(1136),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 647, DateTimeKind.Utc).AddTicks(6841),
                             IsActive = true,
                             RoleName = "superadmin"
                         },
                         new
                         {
                             RoleId = 2,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2073),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 647, DateTimeKind.Utc).AddTicks(7482),
                             IsActive = true,
                             RoleName = "admin"
                         },
                         new
                         {
                             RoleId = 3,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2077),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 647, DateTimeKind.Utc).AddTicks(7486),
                             IsActive = true,
                             RoleName = "principal"
                         },
                         new
                         {
                             RoleId = 4,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2079),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 647, DateTimeKind.Utc).AddTicks(7487),
                             IsActive = true,
                             RoleName = "teacher"
                         },
                         new
                         {
                             RoleId = 5,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2080),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 647, DateTimeKind.Utc).AddTicks(7488),
                             IsActive = true,
                             RoleName = "parent"
                         },
                         new
                         {
                             RoleId = 6,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2081),
+                            CreatedAt = new DateTime(2026, 10, 2, 18, 44, 57, 647, DateTimeKind.Utc).AddTicks(7488),
                             IsActive = true,
                             RoleName = "staff"
                         });
@@ -6304,7 +6276,7 @@ namespace SchoolManagement.API.Migrations
                             IsActive = true,
                             IsDeleted = false,
                             Password = "Admin@123",
-                            PasswordHash = "$2a$11$Bp3zdA9zOZSm0PfUdY6vFO7wAq6JRy7SeWiobLaG8vCLU6SAfrSTG",
+                            PasswordHash = "$2a$11$Yo9o3q2TdpeM45JHY4qxw.HYbQAR2a4YBuWeJyBCzJmxLdO59regS",
                             RoleId = 1
                         });
                 });

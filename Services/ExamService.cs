@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SchoolManagement.API.Data;
+using SchoolManagement.API.DTOs.Assessment;
 using SchoolManagement.API.DTOs.Exam;
 using SchoolManagement.API.Models;
 
@@ -36,6 +37,15 @@ public interface IExamService
     Task<bool>                   UpdateQuestionAsync(int questionId, UpdateExamQuestionDto dto, int userId);
     Task<bool>                   DeleteQuestionAsync(int questionId, int userId);
     Task<List<ExamQuestionDto>>  SavePaperQuestionsAsync(SavePaperQuestionsDto dto, int userId);
+
+    // ── Syllabus / Question Bank ─────────────────────────────────────────────
+    Task<ExamSyllabusDto> GetSyllabusAsync(int paperId);
+    Task<ExamSyllabusDto> SaveSyllabusAsync(int paperId, SaveExamSyllabusDto dto, int userId);
+    Task<List<QuestionBankItemDto>> ListQuestionBankAsync(int? topicId, string? search, bool? activeOnly);
+    Task<QuestionBankItemDto> CreateQuestionBankItemAsync(CreateQuestionBankItemDto dto, int userId);
+    Task<bool> UpdateQuestionBankItemAsync(int id, UpdateQuestionBankItemDto dto, int userId);
+    Task<bool> DeleteQuestionBankItemAsync(int id, int userId);
+    Task<List<ExamQuestionDto>> CopyQuestionBankToPaperAsync(CopyQuestionBankToPaperDto dto, int userId);
 }
 
 public class ExamService : IExamService
@@ -632,6 +642,7 @@ public class ExamService : IExamService
             .Where(q => q.ExamPaperId == paperId)
             .Include(q => q.Options)
             .Include(q => q.ExamPaperSection)
+            .Include(q => q.CourseTopic)
             .OrderBy(q => q.SortOrder)
             .ToListAsync();
 
@@ -654,6 +665,7 @@ public class ExamService : IExamService
             CorrectAnswer      = dto.CorrectAnswer,
             IsTrue             = dto.IsTrue,
             QuestionNote       = dto.QuestionNote,
+            CourseTopicId      = dto.CourseTopicId,
             CreatedBy          = userId,
             CreatedAt          = DateTime.UtcNow
         };
@@ -691,6 +703,7 @@ public class ExamService : IExamService
         if (dto.CorrectAnswer != null) q.CorrectAnswer = dto.CorrectAnswer;
         if (dto.IsTrue.HasValue)       q.IsTrue        = dto.IsTrue;
         if (dto.QuestionNote  != null) q.QuestionNote  = dto.QuestionNote;
+        if (dto.CourseTopicId.HasValue) q.CourseTopicId = dto.CourseTopicId == 0 ? null : dto.CourseTopicId;
         q.UpdatedBy = userId;
         q.UpdatedAt = DateTime.UtcNow;
 
@@ -749,6 +762,7 @@ public class ExamService : IExamService
                 CorrectAnswer      = qDto.CorrectAnswer,
                 IsTrue             = qDto.IsTrue,
                 QuestionNote       = qDto.QuestionNote,
+                CourseTopicId      = qDto.CourseTopicId,
                 CreatedBy          = userId,
                 CreatedAt          = DateTime.UtcNow
             };
@@ -807,6 +821,8 @@ public class ExamService : IExamService
         CorrectAnswer  = q.CorrectAnswer,
         IsTrue         = q.IsTrue,
         QuestionNote   = q.QuestionNote,
+        CourseTopicId  = q.CourseTopicId,
+        TopicTitle     = q.CourseTopic?.Title,
         Options        = q.Options.OrderBy(o => o.SortOrder).Select(o => new ExamQuestionOptionDto
         {
             ExamQuestionOptionId = o.ExamQuestionOptionId,
@@ -814,6 +830,289 @@ public class ExamService : IExamService
             OptionText           = o.OptionText,
             IsCorrect            = o.IsCorrect,
             SortOrder            = o.SortOrder
+        }).ToList()
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SYLLABUS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public async Task<ExamSyllabusDto> GetSyllabusAsync(int paperId)
+    {
+        var paper = await _db.ExamPapers.AsNoTracking().FirstOrDefaultAsync(p => p.ExamPaperId == paperId)
+            ?? throw new ArgumentException("Exam paper not found.");
+
+        var plan = await _db.CoursePlans.AsNoTracking()
+            .FirstOrDefaultAsync(p => !p.IsDeleted && p.Status == "Published"
+                && p.AcademicYearId == paper.AcademicYearId
+                && p.ClassId == paper.ClassId
+                && p.SubjectId == paper.SubjectId);
+
+        var items = await _db.ExamSyllabusItems.AsNoTracking()
+            .Include(i => i.CourseChapter)
+            .Include(i => i.CourseTopic)
+            .Where(i => i.ExamPaperId == paperId && !i.IsDeleted)
+            .ToListAsync();
+
+        return new ExamSyllabusDto
+        {
+            ExamPaperId = paperId,
+            CoursePlanId = plan?.CoursePlanId,
+            CoursePlanTitle = plan?.Title,
+            SyllabusNote = paper.SyllabusNote,
+            Items = items.Select(i => new ExamSyllabusItemDto
+            {
+                ExamSyllabusItemId = i.ExamSyllabusItemId,
+                ExamPaperId = i.ExamPaperId,
+                CourseChapterId = i.CourseChapterId,
+                ChapterTitle = i.CourseChapter?.Title,
+                CourseTopicId = i.CourseTopicId,
+                TopicTitle = i.CourseTopic?.Title
+            }).ToList()
+        };
+    }
+
+    public async Task<ExamSyllabusDto> SaveSyllabusAsync(int paperId, SaveExamSyllabusDto dto, int userId)
+    {
+        var paper = await _db.ExamPapers.FirstOrDefaultAsync(p => p.ExamPaperId == paperId)
+            ?? throw new ArgumentException("Exam paper not found.");
+
+        var plan = await _db.CoursePlans
+            .Include(p => p.Chapters).ThenInclude(c => c.Topics)
+            .FirstOrDefaultAsync(p => !p.IsDeleted && p.Status == "Published"
+                && p.AcademicYearId == paper.AcademicYearId
+                && p.ClassId == paper.ClassId
+                && p.SubjectId == paper.SubjectId);
+
+        if (dto.Items.Count > 0 && plan is null)
+            throw new ArgumentException("No Published Course Plan exists for this paper's year/class/subject.");
+
+        var chapterIds = plan?.Chapters.Where(c => !c.IsDeleted).Select(c => c.CourseChapterId).ToHashSet()
+            ?? new HashSet<int>();
+        var topicIds = plan?.Chapters.Where(c => !c.IsDeleted)
+            .SelectMany(c => c.Topics.Where(t => !t.IsDeleted))
+            .Select(t => t.CourseTopicId).ToHashSet()
+            ?? new HashSet<int>();
+
+        foreach (var item in dto.Items)
+        {
+            var hasChapter = item.CourseChapterId is > 0;
+            var hasTopic = item.CourseTopicId is > 0;
+            if (hasChapter == hasTopic)
+                throw new ArgumentException("Each syllabus item must specify either a chapter or a topic (not both, not neither).");
+            if (hasChapter && !chapterIds.Contains(item.CourseChapterId!.Value))
+                throw new ArgumentException($"Chapter {item.CourseChapterId} does not belong to the Published Course Plan.");
+            if (hasTopic && !topicIds.Contains(item.CourseTopicId!.Value))
+                throw new ArgumentException($"Topic {item.CourseTopicId} does not belong to the Published Course Plan.");
+        }
+
+        var existing = await _db.ExamSyllabusItems.Where(i => i.ExamPaperId == paperId).ToListAsync();
+        _db.ExamSyllabusItems.RemoveRange(existing);
+
+        foreach (var item in dto.Items)
+        {
+            _db.ExamSyllabusItems.Add(new ExamSyllabusItem
+            {
+                ExamPaperId = paperId,
+                CourseChapterId = item.CourseChapterId is > 0 ? item.CourseChapterId : null,
+                CourseTopicId = item.CourseTopicId is > 0 ? item.CourseTopicId : null,
+                CreatedBy = userId,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
+        paper.UpdatedBy = userId;
+        paper.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return await GetSyllabusAsync(paperId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // QUESTION BANK
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public async Task<List<QuestionBankItemDto>> ListQuestionBankAsync(int? topicId, string? search, bool? activeOnly)
+    {
+        var q = _db.QuestionBankItems.AsNoTracking()
+            .Include(i => i.CourseTopic)
+            .Include(i => i.Options)
+            .Where(i => !i.IsDeleted)
+            .AsQueryable();
+        if (topicId is > 0) q = q.Where(i => i.CourseTopicId == topicId);
+        if (activeOnly == true) q = q.Where(i => i.IsActive);
+        if (!string.IsNullOrWhiteSpace(search))
+            q = q.Where(i => i.QuestionText.Contains(search));
+
+        var list = await q.OrderByDescending(i => i.CreatedAt).Take(200).ToListAsync();
+        return list.Select(MapBankItem).ToList();
+    }
+
+    public async Task<QuestionBankItemDto> CreateQuestionBankItemAsync(CreateQuestionBankItemDto dto, int userId)
+    {
+        ValidateQuestion(dto.QuestionType, dto.Options.Select(o => new CreateExamQuestionOptionDto
+        {
+            OptionLabel = o.OptionLabel, OptionText = o.OptionText, IsCorrect = o.IsCorrect, SortOrder = o.SortOrder
+        }).ToList(), dto.IsTrue);
+
+        if (!await _db.CourseTopics.AnyAsync(t => t.CourseTopicId == dto.CourseTopicId && !t.IsDeleted))
+            throw new ArgumentException("Topic not found.");
+
+        var item = new QuestionBankItem
+        {
+            CourseTopicId = dto.CourseTopicId,
+            QuestionType = dto.QuestionType,
+            QuestionText = dto.QuestionText.Trim(),
+            Language = dto.Language ?? "en",
+            Marks = dto.Marks,
+            CorrectAnswer = dto.CorrectAnswer,
+            IsTrue = dto.IsTrue,
+            QuestionNote = dto.QuestionNote,
+            IsActive = true,
+            CreatedBy = userId,
+            CreatedAt = DateTime.UtcNow
+        };
+        foreach (var (opt, i) in dto.Options.Select((o, i) => (o, i)))
+        {
+            item.Options.Add(new QuestionBankOption
+            {
+                OptionLabel = opt.OptionLabel,
+                OptionText = opt.OptionText,
+                IsCorrect = opt.IsCorrect,
+                SortOrder = opt.SortOrder == 0 ? i : opt.SortOrder,
+                CreatedBy = userId,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+        _db.QuestionBankItems.Add(item);
+        await _db.SaveChangesAsync();
+        await _db.Entry(item).Reference(x => x.CourseTopic).LoadAsync();
+        return MapBankItem(item);
+    }
+
+    public async Task<bool> UpdateQuestionBankItemAsync(int id, UpdateQuestionBankItemDto dto, int userId)
+    {
+        var item = await _db.QuestionBankItems.Include(i => i.Options)
+            .FirstOrDefaultAsync(i => i.QuestionBankItemId == id && !i.IsDeleted);
+        if (item is null) return false;
+
+        if (dto.QuestionText != null) item.QuestionText = dto.QuestionText.Trim();
+        if (dto.Language != null) item.Language = dto.Language;
+        if (dto.Marks.HasValue) item.Marks = dto.Marks.Value;
+        if (dto.CorrectAnswer != null) item.CorrectAnswer = dto.CorrectAnswer;
+        if (dto.IsTrue.HasValue) item.IsTrue = dto.IsTrue;
+        if (dto.QuestionNote != null) item.QuestionNote = dto.QuestionNote;
+        if (dto.IsActive.HasValue) item.IsActive = dto.IsActive.Value;
+        if (dto.Options != null)
+        {
+            _db.QuestionBankOptions.RemoveRange(item.Options);
+            foreach (var (opt, i) in dto.Options.Select((o, i) => (o, i)))
+            {
+                item.Options.Add(new QuestionBankOption
+                {
+                    OptionLabel = opt.OptionLabel,
+                    OptionText = opt.OptionText,
+                    IsCorrect = opt.IsCorrect,
+                    SortOrder = opt.SortOrder == 0 ? i : opt.SortOrder,
+                    CreatedBy = userId,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+        item.UpdatedBy = userId;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteQuestionBankItemAsync(int id, int userId)
+    {
+        var item = await _db.QuestionBankItems.FindAsync(id);
+        if (item is null || item.IsDeleted) return false;
+        item.IsDeleted = true;
+        item.IsActive = false;
+        item.UpdatedBy = userId;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<List<ExamQuestionDto>> CopyQuestionBankToPaperAsync(CopyQuestionBankToPaperDto dto, int userId)
+    {
+        var paper = await _db.ExamPapers.FirstOrDefaultAsync(p => p.ExamPaperId == dto.ExamPaperId)
+            ?? throw new ArgumentException("Exam paper not found.");
+        if (paper.IsLocked)
+            throw new ArgumentException("Cannot add questions to a locked paper.");
+
+        var bankItems = await _db.QuestionBankItems
+            .Include(i => i.Options)
+            .Where(i => dto.QuestionBankItemIds.Contains(i.QuestionBankItemId) && !i.IsDeleted && i.IsActive)
+            .ToListAsync();
+        if (bankItems.Count == 0)
+            throw new ArgumentException("No valid question bank items found.");
+
+        var maxOrder = await _db.ExamQuestions.Where(q => q.ExamPaperId == dto.ExamPaperId)
+            .Select(q => (int?)q.SortOrder).MaxAsync() ?? 0;
+
+        var created = new List<ExamQuestion>();
+        foreach (var bi in bankItems)
+        {
+            maxOrder++;
+            var q = new ExamQuestion
+            {
+                ExamPaperId = dto.ExamPaperId,
+                ExamPaperSectionId = dto.ExamPaperSectionId,
+                QuestionType = bi.QuestionType,
+                QuestionText = bi.QuestionText,
+                Language = bi.Language,
+                Marks = bi.Marks,
+                SortOrder = maxOrder,
+                CorrectAnswer = bi.CorrectAnswer,
+                IsTrue = bi.IsTrue,
+                QuestionNote = bi.QuestionNote,
+                CourseTopicId = bi.CourseTopicId,
+                CreatedBy = userId,
+                CreatedAt = DateTime.UtcNow
+            };
+            foreach (var opt in bi.Options.Where(o => !o.IsDeleted).OrderBy(o => o.SortOrder))
+            {
+                q.Options.Add(new ExamQuestionOption
+                {
+                    OptionLabel = opt.OptionLabel,
+                    OptionText = opt.OptionText,
+                    IsCorrect = opt.IsCorrect,
+                    SortOrder = opt.SortOrder,
+                    CreatedBy = userId,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            _db.ExamQuestions.Add(q);
+            created.Add(q);
+        }
+        await _db.SaveChangesAsync();
+        return created.Select(MapQuestion).ToList();
+    }
+
+    private static QuestionBankItemDto MapBankItem(QuestionBankItem i) => new()
+    {
+        QuestionBankItemId = i.QuestionBankItemId,
+        CourseTopicId = i.CourseTopicId,
+        TopicTitle = i.CourseTopic?.Title ?? "",
+        QuestionTypeId = (int)i.QuestionType,
+        QuestionType = i.QuestionType.ToString(),
+        QuestionText = i.QuestionText,
+        Language = i.Language,
+        Marks = i.Marks,
+        CorrectAnswer = i.CorrectAnswer,
+        IsTrue = i.IsTrue,
+        QuestionNote = i.QuestionNote,
+        IsActive = i.IsActive,
+        Options = i.Options.Where(o => !o.IsDeleted).OrderBy(o => o.SortOrder).Select(o => new QuestionBankOptionDto
+        {
+            QuestionBankOptionId = o.QuestionBankOptionId,
+            OptionLabel = o.OptionLabel,
+            OptionText = o.OptionText,
+            IsCorrect = o.IsCorrect,
+            SortOrder = o.SortOrder
         }).ToList()
     };
 }

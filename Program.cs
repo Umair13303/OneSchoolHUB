@@ -99,6 +99,8 @@ builder.Services.AddScoped<ITimetableService, TimetableService>();
 builder.Services.AddScoped<ISubstitutionService, SubstitutionService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IHomeworkService, HomeworkService>();
+builder.Services.AddScoped<ICurriculumService, CurriculumService>();
+builder.Services.AddScoped<IClassroomAssessmentService, ClassroomAssessmentService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IPdfReportService, PdfReportService>();
 builder.Services.AddScoped<IActivityLogService, ActivityLogService>();

@@ -18,6 +18,7 @@ public class InstituteDto
     public bool    ModuleTimetable   { get; set; }
     public bool    ModuleHR          { get; set; }
     public bool    ModuleReports     { get; set; }
+    public bool    ModuleCurriculum  { get; set; }
     public int     CampusCount       { get; set; }
     public string  ChallanTemplate   { get; set; } = "cash_memo";
     public string? SchoolStampUrl    { get; set; }
@@ -39,6 +40,7 @@ public class CreateInstituteDto
     public bool    ModuleTimetable  { get; set; } = true;
     public bool    ModuleHR         { get; set; } = true;
     public bool    ModuleReports    { get; set; } = true;
+    public bool    ModuleCurriculum { get; set; } = true;
 }
 
 public class UpdateInstituteDto : CreateInstituteDto
@@ -55,6 +57,7 @@ public class InstituteModulesDto
     public bool ModuleTimetable  { get; set; }
     public bool ModuleHR         { get; set; }
     public bool ModuleReports    { get; set; }
+    public bool ModuleCurriculum { get; set; }
 }
 
 public class InstituteChallanTemplateDto

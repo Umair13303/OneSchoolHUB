@@ -56,6 +56,22 @@ public class AppDbContext : DbContext
     public DbSet<Attendance> Attendances => Set<Attendance>();
     public DbSet<Homework> Homeworks => Set<Homework>();
     public DbSet<HomeworkSubmission> HomeworkSubmissions => Set<HomeworkSubmission>();
+
+    // Curriculum / Course Content
+    public DbSet<CoursePlan> CoursePlans => Set<CoursePlan>();
+    public DbSet<CourseChapter> CourseChapters => Set<CourseChapter>();
+    public DbSet<CourseTopic> CourseTopics => Set<CourseTopic>();
+    public DbSet<CourseMaterial> CourseMaterials => Set<CourseMaterial>();
+    public DbSet<CourseTopicProgress> CourseTopicProgresses => Set<CourseTopicProgress>();
+    public DbSet<CourseTopicActivity> CourseTopicActivities => Set<CourseTopicActivity>();
+    public DbSet<CourseTeachingLog> CourseTeachingLogs => Set<CourseTeachingLog>();
+    public DbSet<AssessmentResultLookup> AssessmentResultLookups => Set<AssessmentResultLookup>();
+    public DbSet<ClassAssessment> ClassAssessments => Set<ClassAssessment>();
+    public DbSet<ClassAssessmentResult> ClassAssessmentResults => Set<ClassAssessmentResult>();
+    public DbSet<StudentTopicPerformance> StudentTopicPerformances => Set<StudentTopicPerformance>();
+    public DbSet<ExamSyllabusItem> ExamSyllabusItems => Set<ExamSyllabusItem>();
+    public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
+    public DbSet<QuestionBankOption> QuestionBankOptions => Set<QuestionBankOption>();
     public DbSet<FeeType> FeeTypes => Set<FeeType>();
     public DbSet<FeeStructure> FeeStructures => Set<FeeStructure>();
     public DbSet<StudentFee> StudentFees => Set<StudentFee>();
@@ -135,6 +151,34 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Attendance>().HasQueryFilter(e =>
             !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
         modelBuilder.Entity<Homework>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<CoursePlan>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<CourseChapter>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<CourseTopic>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<CourseMaterial>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<CourseTopicProgress>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<CourseTopicActivity>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<CourseTeachingLog>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<AssessmentResultLookup>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<ClassAssessment>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<ClassAssessmentResult>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<StudentTopicPerformance>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<ExamSyllabusItem>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<QuestionBankItem>().HasQueryFilter(e =>
+            !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
+        modelBuilder.Entity<QuestionBankOption>().HasQueryFilter(e =>
             !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
         modelBuilder.Entity<Staff>().HasQueryFilter(e =>
             !e.IsDeleted && (IsSuperAdmin || e.InstituteId == null || e.InstituteId == TenantId));
@@ -268,6 +312,31 @@ public class AppDbContext : DbContext
             new CalendarEventType { CalendarEventTypeId = 5, Name = "Final Exam",       Color = "#059669", Icon = "school",         SortOrder = 5 },
             new CalendarEventType { CalendarEventTypeId = 6, Name = "Result Day",       Color = "#ea580c", Icon = "emoji_events",   SortOrder = 6 },
             new CalendarEventType { CalendarEventTypeId = 7, Name = "Other",            Color = "#6b7280", Icon = "event",          SortOrder = 7 }
+        );
+
+        // System-wide assessment result statuses (InstituteId null = shared defaults)
+        var assessmentLookupSeed = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        modelBuilder.Entity<AssessmentResultLookup>().HasData(
+            new AssessmentResultLookup
+            {
+                AssessmentResultLookupId = 1, Code = "Remembered", LabelEn = "Remembered",
+                LabelUr = "یاد ہے", SortOrder = 1, IsActive = true, CreatedAt = assessmentLookupSeed
+            },
+            new AssessmentResultLookup
+            {
+                AssessmentResultLookupId = 2, Code = "PartiallyRemembered", LabelEn = "Partially Remembered",
+                LabelUr = "جزوی یاد ہے", SortOrder = 2, IsActive = true, CreatedAt = assessmentLookupSeed
+            },
+            new AssessmentResultLookup
+            {
+                AssessmentResultLookupId = 3, Code = "NotRemembered", LabelEn = "Not Remembered",
+                LabelUr = "یاد نہیں", SortOrder = 3, IsActive = true, CreatedAt = assessmentLookupSeed
+            },
+            new AssessmentResultLookup
+            {
+                AssessmentResultLookupId = 4, Code = "NeedsPractice", LabelEn = "Needs Practice",
+                LabelUr = "مزید مشق", SortOrder = 4, IsActive = true, CreatedAt = assessmentLookupSeed
+            }
         );
 
         // Role → Users
@@ -563,9 +632,16 @@ public class AppDbContext : DbContext
             new MenuItem { MenuItemId = 16, ParentId = 15,   Title = "Assign Homework",    Icon = "edit_note", RouteUrl = "/homework/assign", SortOrder = 71, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 17, ParentId = 15,   Title = "Diary / Homework",   Icon = "menu_book", RouteUrl = "/homework/list",   SortOrder = 72, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
 
+            // Curriculum / Course Content
+            new MenuItem { MenuItemId = 54, ParentId = null, Title = "Curriculum",           Icon = "auto_stories",   RouteUrl = null,                      SortOrder = 55, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 55, ParentId = 54,   Title = "Courses",              Icon = "library_books",  RouteUrl = "/curriculum/plans",        SortOrder = 56, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 56, ParentId = 54,   Title = "Curriculum Progress",  Icon = "monitoring",     RouteUrl = "/curriculum/progress",     SortOrder = 57, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 57, ParentId = 54,   Title = "My Courses",           Icon = "menu_book",      RouteUrl = "/curriculum/my-courses",   SortOrder = 58, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+
             // Exam Module
             new MenuItem { MenuItemId = 34, ParentId = null, Title = "Exams",          Icon = "quiz",           RouteUrl = null,                   SortOrder = 65, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 35, ParentId = 34,   Title = "Paper Setup",    Icon = "edit_document",  RouteUrl = "/exams/papers",         SortOrder = 66, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 58, ParentId = 34,   Title = "Question Bank",  Icon = "library_books",  RouteUrl = "/exams/question-bank",  SortOrder = 67, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 36, ParentId = 34,   Title = "Exam Schedule",  Icon = "calendar_month", RouteUrl = "/exams/schedule",       SortOrder = 67, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 37, ParentId = 34,   Title = "Enter Results",  Icon = "grading",        RouteUrl = "/exams/results/enter",  SortOrder = 68, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 38, ParentId = 34,   Title = "Result Cards",   Icon = "emoji_events",   RouteUrl = "/exams/results/cards",  SortOrder = 69, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
@@ -720,6 +796,11 @@ public class AppDbContext : DbContext
             new MenuRolePermission { Id = 111, MenuItemId = 35, RoleId = 3 },
             new MenuRolePermission { Id = 112, MenuItemId = 35, RoleId = 4 },
 
+            // Question Bank (58) → Admin, Principal, Teacher (same as Paper Setup)
+            new MenuRolePermission { Id = 211, MenuItemId = 58, RoleId = 2 },
+            new MenuRolePermission { Id = 212, MenuItemId = 58, RoleId = 3 },
+            new MenuRolePermission { Id = 213, MenuItemId = 58, RoleId = 4 },
+
             // Exam Schedule (36) → SuperAdmin, Admin, Principal, Teacher, Parent
             new MenuRolePermission { Id = 114, MenuItemId = 36, RoleId = 2 },
             new MenuRolePermission { Id = 115, MenuItemId = 36, RoleId = 3 },
@@ -735,7 +816,20 @@ public class AppDbContext : DbContext
             new MenuRolePermission { Id = 123, MenuItemId = 38, RoleId = 2 },
             new MenuRolePermission { Id = 124, MenuItemId = 38, RoleId = 3 },
             new MenuRolePermission { Id = 125, MenuItemId = 38, RoleId = 4 },
-            new MenuRolePermission { Id = 126, MenuItemId = 38, RoleId = 5 }
+            new MenuRolePermission { Id = 126, MenuItemId = 38, RoleId = 5 },
+
+            // Curriculum (54) → Admin, Principal, Teacher (no Superadmin school access)
+            new MenuRolePermission { Id = 203, MenuItemId = 54, RoleId = 2 },
+            new MenuRolePermission { Id = 204, MenuItemId = 54, RoleId = 3 },
+            new MenuRolePermission { Id = 205, MenuItemId = 54, RoleId = 4 },
+            // Courses (55) → Admin, Principal
+            new MenuRolePermission { Id = 206, MenuItemId = 55, RoleId = 2 },
+            new MenuRolePermission { Id = 207, MenuItemId = 55, RoleId = 3 },
+            // Curriculum Progress (56) → Admin, Principal
+            new MenuRolePermission { Id = 208, MenuItemId = 56, RoleId = 2 },
+            new MenuRolePermission { Id = 209, MenuItemId = 56, RoleId = 3 },
+            // My Courses (57) → Teacher
+            new MenuRolePermission { Id = 210, MenuItemId = 57, RoleId = 4 }
         );
 
         // ── Exam Module FK configuration ──────────────────────────────────────────
@@ -968,5 +1062,166 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<CurrentStock>().Property(c => c.QuantityOnHand).HasPrecision(14, 2);
 
         modelBuilder.Entity<InventorySettings>().Property(s => s.DefaultTaxPercentage).HasPrecision(5, 2);
+
+        // ── Curriculum / Course Content ────────────────────────────────────────
+        modelBuilder.Entity<CoursePlan>().HasKey(e => e.CoursePlanId);
+        modelBuilder.Entity<CoursePlan>()
+            .HasOne(e => e.AcademicYear).WithMany().HasForeignKey(e => e.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CoursePlan>()
+            .HasOne(e => e.Class).WithMany().HasForeignKey(e => e.ClassId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CoursePlan>()
+            .HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CoursePlan>()
+            .HasIndex(e => new { e.InstituteId, e.AcademicYearId, e.ClassId, e.SubjectId });
+
+        modelBuilder.Entity<CourseChapter>().HasKey(e => e.CourseChapterId);
+        modelBuilder.Entity<CourseChapter>()
+            .HasOne(e => e.CoursePlan).WithMany(p => p.Chapters).HasForeignKey(e => e.CoursePlanId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CourseTopic>().HasKey(e => e.CourseTopicId);
+        modelBuilder.Entity<CourseTopic>()
+            .HasOne(e => e.CourseChapter).WithMany(c => c.Topics).HasForeignKey(e => e.CourseChapterId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CourseMaterial>().HasKey(e => e.CourseMaterialId);
+        modelBuilder.Entity<CourseMaterial>()
+            .HasOne(e => e.CourseChapter).WithMany(c => c.Materials).HasForeignKey(e => e.CourseChapterId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<CourseMaterial>()
+            .HasOne(e => e.CourseTopic).WithMany(t => t.Materials).HasForeignKey(e => e.CourseTopicId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseMaterial>()
+            .HasOne(e => e.FileStore).WithMany().HasForeignKey(e => e.FileStoreId)
+            .IsRequired(false).OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<CourseTopicProgress>().HasKey(e => e.CourseTopicProgressId);
+        modelBuilder.Entity<CourseTopicProgress>()
+            .HasOne(e => e.CourseTopic).WithOne(t => t.Progress)
+            .HasForeignKey<CourseTopicProgress>(e => e.CourseTopicId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<CourseTopicProgress>()
+            .HasIndex(e => e.CourseTopicId).IsUnique();
+        modelBuilder.Entity<CourseTopicProgress>()
+            .HasOne(e => e.CompletedByTeacher).WithMany().HasForeignKey(e => e.CompletedByTeacherId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTopicProgress>()
+            .HasOne(e => e.LastUpdatedByTeacher).WithMany().HasForeignKey(e => e.LastUpdatedByTeacherId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<CourseTopicActivity>().HasKey(e => e.CourseTopicActivityId);
+        modelBuilder.Entity<CourseTopicActivity>()
+            .HasOne(e => e.CourseTopic).WithMany(t => t.Activities).HasForeignKey(e => e.CourseTopicId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<CourseTopicActivity>()
+            .HasOne(e => e.ReferenceImage).WithMany().HasForeignKey(e => e.ReferenceImageFileId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTopicActivity>()
+            .HasOne(e => e.ExampleImage).WithMany().HasForeignKey(e => e.ExampleImageFileId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTopicActivity>()
+            .HasOne(e => e.WorksheetFile).WithMany().HasForeignKey(e => e.WorksheetFileId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTopicActivity>()
+            .HasIndex(e => new { e.CourseTopicId, e.SortOrder });
+
+        modelBuilder.Entity<CourseTeachingLog>().HasKey(e => e.CourseTeachingLogId);
+        modelBuilder.Entity<CourseTeachingLog>()
+            .HasOne(e => e.Teacher).WithMany().HasForeignKey(e => e.TeacherId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTeachingLog>()
+            .HasOne(e => e.Class).WithMany().HasForeignKey(e => e.ClassId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTeachingLog>()
+            .HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTeachingLog>()
+            .HasOne(e => e.AcademicYear).WithMany().HasForeignKey(e => e.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTeachingLog>()
+            .HasOne(e => e.CourseTopic).WithMany(t => t.TeachingLogs).HasForeignKey(e => e.CourseTopicId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CourseTeachingLog>()
+            .HasOne(e => e.Homework).WithMany().HasForeignKey(e => e.HomeworkId)
+            .IsRequired(false).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<CourseTeachingLog>()
+            .HasIndex(e => new { e.ClassId, e.TeachingDate });
+
+        modelBuilder.Entity<Homework>()
+            .HasOne(e => e.CourseTopic).WithMany().HasForeignKey(e => e.CourseTopicId)
+            .IsRequired(false).OnDelete(DeleteBehavior.SetNull);
+
+        // ── Classroom Assessment / Student Performance / Exam Syllabus ─────────
+        modelBuilder.Entity<AssessmentResultLookup>().HasKey(e => e.AssessmentResultLookupId);
+        modelBuilder.Entity<AssessmentResultLookup>()
+            .HasIndex(e => new { e.InstituteId, e.Code });
+
+        modelBuilder.Entity<ClassAssessment>().HasKey(e => e.ClassAssessmentId);
+        modelBuilder.Entity<ClassAssessment>()
+            .HasOne(e => e.Class).WithMany().HasForeignKey(e => e.ClassId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ClassAssessment>()
+            .HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ClassAssessment>()
+            .HasOne(e => e.AcademicYear).WithMany().HasForeignKey(e => e.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ClassAssessment>()
+            .HasOne(e => e.CourseTopic).WithMany().HasForeignKey(e => e.CourseTopicId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ClassAssessment>()
+            .HasOne(e => e.CourseTeachingLog).WithMany().HasForeignKey(e => e.CourseTeachingLogId)
+            .IsRequired(false).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<ClassAssessment>()
+            .HasOne(e => e.Teacher).WithMany().HasForeignKey(e => e.TeacherId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ClassAssessment>()
+            .HasIndex(e => new { e.ClassId, e.AssessmentDate });
+        modelBuilder.Entity<ClassAssessment>()
+            .HasIndex(e => e.CourseTopicId);
+
+        modelBuilder.Entity<ClassAssessmentResult>().HasKey(e => e.ClassAssessmentResultId);
+        modelBuilder.Entity<ClassAssessmentResult>()
+            .HasOne(e => e.ClassAssessment).WithMany(a => a.Results).HasForeignKey(e => e.ClassAssessmentId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ClassAssessmentResult>()
+            .HasOne(e => e.Student).WithMany().HasForeignKey(e => e.StudentId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ClassAssessmentResult>()
+            .HasIndex(e => new { e.ClassAssessmentId, e.StudentId }).IsUnique();
+        modelBuilder.Entity<ClassAssessmentResult>()
+            .Property(e => e.ObtainedMarks).HasPrecision(10, 2);
+
+        modelBuilder.Entity<StudentTopicPerformance>().HasKey(e => e.StudentTopicPerformanceId);
+        modelBuilder.Entity<StudentTopicPerformance>()
+            .HasOne(e => e.Student).WithMany().HasForeignKey(e => e.StudentId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StudentTopicPerformance>()
+            .HasOne(e => e.CourseTopic).WithMany().HasForeignKey(e => e.CourseTopicId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StudentTopicPerformance>()
+            .HasOne(e => e.Class).WithMany().HasForeignKey(e => e.ClassId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StudentTopicPerformance>()
+            .HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StudentTopicPerformance>()
+            .HasOne(e => e.AcademicYear).WithMany().HasForeignKey(e => e.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StudentTopicPerformance>()
+            .HasOne(e => e.Teacher).WithMany().HasForeignKey(e => e.TeacherId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StudentTopicPerformance>()
+            .HasIndex(e => new { e.CourseTopicId, e.PerformanceDate });
+        modelBuilder.Entity<StudentTopicPerformance>()
+            .HasIndex(e => new { e.StudentId, e.CourseTopicId, e.PerformanceDate });
+
+        modelBuilder.Entity<ExamSyllabusItem>().HasKey(e => e.ExamSyllabusItemId);
+        modelBuilder.Entity<ExamSyllabusItem>()
+            .HasOne(e => e.ExamPaper).WithMany().HasForeignKey(e => e.ExamPaperId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ExamSyllabusItem>()
+            .HasOne(e => e.CourseChapter).WithMany().HasForeignKey(e => e.CourseChapterId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ExamSyllabusItem>()
+            .HasOne(e => e.CourseTopic).WithMany().HasForeignKey(e => e.CourseTopicId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ExamSyllabusItem>()
+            .HasIndex(e => e.ExamPaperId);
+
+        modelBuilder.Entity<ExamQuestion>()
+            .HasOne(e => e.CourseTopic).WithMany().HasForeignKey(e => e.CourseTopicId)
+            .IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<QuestionBankItem>().HasKey(e => e.QuestionBankItemId);
+        modelBuilder.Entity<QuestionBankItem>()
+            .HasOne(e => e.CourseTopic).WithMany().HasForeignKey(e => e.CourseTopicId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<QuestionBankItem>()
+            .HasIndex(e => e.CourseTopicId);
+
+        modelBuilder.Entity<QuestionBankOption>().HasKey(e => e.QuestionBankOptionId);
+        modelBuilder.Entity<QuestionBankOption>()
+            .HasOne(e => e.QuestionBankItem).WithMany(i => i.Options).HasForeignKey(e => e.QuestionBankItemId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

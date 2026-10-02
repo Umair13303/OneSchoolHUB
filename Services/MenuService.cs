@@ -36,6 +36,7 @@ public class MenuService : IMenuService
         ["moduleTimetable"]  = ["/timetable"],
         ["moduleHR"]         = ["/hr", "/staff"],
         ["moduleReports"]    = ["/reports"],
+        ["moduleCurriculum"] = ["/curriculum"],
     };
 
     public MenuService(AppDbContext db, ITenantContext tenant)
@@ -74,7 +75,8 @@ public class MenuService : IMenuService
                 .Where(i => i.InstituteId == _tenant.InstituteId.Value)
                 .Select(i => new {
                     i.ModuleAttendance, i.ModuleFees, i.ModuleHomework,
-                    i.ModuleExams, i.ModuleTimetable, i.ModuleHR, i.ModuleReports
+                    i.ModuleExams, i.ModuleTimetable, i.ModuleHR, i.ModuleReports,
+                    i.ModuleCurriculum
                 })
                 .FirstOrDefaultAsync();
 
@@ -88,6 +90,7 @@ public class MenuService : IMenuService
                 if (!institute.ModuleTimetable)  foreach (var r in ModuleRoutes["moduleTimetable"])  disabledRoutes.Add(r);
                 if (!institute.ModuleHR)         foreach (var r in ModuleRoutes["moduleHR"])         disabledRoutes.Add(r);
                 if (!institute.ModuleReports)    foreach (var r in ModuleRoutes["moduleReports"])    disabledRoutes.Add(r);
+                if (!institute.ModuleCurriculum) foreach (var r in ModuleRoutes["moduleCurriculum"]) disabledRoutes.Add(r);
 
                 if (disabledRoutes.Count > 0)
                     visibleItems = visibleItems

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SchoolManagement.API.Data;
 
@@ -11,9 +12,11 @@ using SchoolManagement.API.Data;
 namespace SchoolManagement.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001203112_AddCourseMaterialContent")]
+    partial class AddCourseMaterialContent
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -126,106 +129,6 @@ namespace SchoolManagement.API.Migrations
                     b.ToTable("AcademicYears");
                 });
 
-            modelBuilder.Entity("SchoolManagement.API.Models.AssessmentResultLookup", b =>
-                {
-                    b.Property<int>("AssessmentResultLookupId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AssessmentResultLookupId"));
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InstituteId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("LabelEn")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("LabelUr")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.HasKey("AssessmentResultLookupId");
-
-                    b.HasIndex("InstituteId", "Code");
-
-                    b.ToTable("AssessmentResultLookups");
-
-                    b.HasData(
-                        new
-                        {
-                            AssessmentResultLookupId = 1,
-                            Code = "Remembered",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            IsDeleted = false,
-                            LabelEn = "Remembered",
-                            LabelUr = "یاد ہے",
-                            SortOrder = 1
-                        },
-                        new
-                        {
-                            AssessmentResultLookupId = 2,
-                            Code = "PartiallyRemembered",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            IsDeleted = false,
-                            LabelEn = "Partially Remembered",
-                            LabelUr = "جزوی یاد ہے",
-                            SortOrder = 2
-                        },
-                        new
-                        {
-                            AssessmentResultLookupId = 3,
-                            Code = "NotRemembered",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            IsDeleted = false,
-                            LabelEn = "Not Remembered",
-                            LabelUr = "یاد نہیں",
-                            SortOrder = 3
-                        },
-                        new
-                        {
-                            AssessmentResultLookupId = 4,
-                            Code = "NeedsPractice",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            IsDeleted = false,
-                            LabelEn = "Needs Practice",
-                            LabelUr = "مزید مشق",
-                            SortOrder = 4
-                        });
-                });
-
             modelBuilder.Entity("SchoolManagement.API.Models.Attendance", b =>
                 {
                     b.Property<int>("AttendanceId")
@@ -334,7 +237,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 1,
                             Color = "#7c3aed",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(5564),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(1653),
                             Icon = "beach_access",
                             IsDeleted = false,
                             Name = "Annual Holiday",
@@ -344,7 +247,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 2,
                             Color = "#dc2626",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6842),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4028),
                             Icon = "flag",
                             IsDeleted = false,
                             Name = "Gazetted Holiday",
@@ -354,7 +257,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 3,
                             Color = "#d97706",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6844),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4036),
                             Icon = "sports_soccer",
                             IsDeleted = false,
                             Name = "Sports Day",
@@ -364,7 +267,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 4,
                             Color = "#0891b2",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6846),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4038),
                             Icon = "quiz",
                             IsDeleted = false,
                             Name = "Short Term Exam",
@@ -374,7 +277,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 5,
                             Color = "#059669",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6848),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4040),
                             Icon = "school",
                             IsDeleted = false,
                             Name = "Final Exam",
@@ -384,7 +287,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 6,
                             Color = "#ea580c",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6849),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4042),
                             Icon = "emoji_events",
                             IsDeleted = false,
                             Name = "Result Day",
@@ -394,7 +297,7 @@ namespace SchoolManagement.API.Migrations
                         {
                             CalendarEventTypeId = 7,
                             Color = "#6b7280",
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 309, DateTimeKind.Utc).AddTicks(6851),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 957, DateTimeKind.Utc).AddTicks(4044),
                             Icon = "event",
                             IsDeleted = false,
                             Name = "Other",
@@ -657,145 +560,6 @@ namespace SchoolManagement.API.Migrations
                     b.HasIndex("AcademicYearId");
 
                     b.ToTable("Classes");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.ClassAssessment", b =>
-                {
-                    b.Property<int>("ClassAssessmentId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ClassAssessmentId"));
-
-                    b.Property<int>("AcademicYearId")
-                        .HasColumnType("int");
-
-                    b.Property<DateOnly>("AssessmentDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("AssessmentType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ClassId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("CourseTeachingLogId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("CourseTopicId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InstituteId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("SubjectId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TeacherId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("TotalMarks")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("TotalQuestions")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.HasKey("ClassAssessmentId");
-
-                    b.HasIndex("AcademicYearId");
-
-                    b.HasIndex("CourseTeachingLogId");
-
-                    b.HasIndex("CourseTopicId");
-
-                    b.HasIndex("SubjectId");
-
-                    b.HasIndex("TeacherId");
-
-                    b.HasIndex("ClassId", "AssessmentDate");
-
-                    b.ToTable("ClassAssessments");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.ClassAssessmentResult", b =>
-                {
-                    b.Property<int>("ClassAssessmentResultId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ClassAssessmentResultId"));
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ClassAssessmentId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InstituteId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<decimal?>("ObtainedMarks")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<string>("Remarks")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Status")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("StudentId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.HasKey("ClassAssessmentResultId");
-
-                    b.HasIndex("StudentId");
-
-                    b.HasIndex("ClassAssessmentId", "StudentId")
-                        .IsUnique();
-
-                    b.ToTable("ClassAssessmentResults");
                 });
 
             modelBuilder.Entity("SchoolManagement.API.Models.ClassSubject", b =>
@@ -1154,80 +918,6 @@ namespace SchoolManagement.API.Migrations
                     b.HasIndex("CourseChapterId");
 
                     b.ToTable("CourseTopics");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.CourseTopicActivity", b =>
-                {
-                    b.Property<int>("CourseTopicActivityId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("CourseTopicActivityId"));
-
-                    b.Property<string>("ActivityType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("CanvasEnabled")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("ConfigJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("CourseTopicId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("ExampleImageFileId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InstituteId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("InstructionText")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("ReferenceImageFileId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("WorksheetFileId")
-                        .HasColumnType("int");
-
-                    b.HasKey("CourseTopicActivityId");
-
-                    b.HasIndex("ExampleImageFileId");
-
-                    b.HasIndex("ReferenceImageFileId");
-
-                    b.HasIndex("WorksheetFileId");
-
-                    b.HasIndex("CourseTopicId", "SortOrder");
-
-                    b.ToTable("CourseTopicActivities");
                 });
 
             modelBuilder.Entity("SchoolManagement.API.Models.CourseTopicProgress", b =>
@@ -1654,9 +1344,6 @@ namespace SchoolManagement.API.Migrations
                     b.Property<string>("CorrectAnswer")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int?>("CourseTopicId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1705,8 +1392,6 @@ namespace SchoolManagement.API.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("ExamQuestionId");
-
-                    b.HasIndex("CourseTopicId");
 
                     b.HasIndex("ExamPaperId");
 
@@ -1908,55 +1593,6 @@ namespace SchoolManagement.API.Migrations
                     b.HasIndex("InvigilatorUserId");
 
                     b.ToTable("ExamSchedules");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.ExamSyllabusItem", b =>
-                {
-                    b.Property<int>("ExamSyllabusItemId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExamSyllabusItemId"));
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("CourseChapterId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("CourseTopicId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ExamPaperId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InstituteId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.HasKey("ExamSyllabusItemId");
-
-                    b.HasIndex("CourseChapterId");
-
-                    b.HasIndex("CourseTopicId");
-
-                    b.HasIndex("ExamPaperId");
-
-                    b.ToTable("ExamSyllabusItems");
                 });
 
             modelBuilder.Entity("SchoolManagement.API.Models.FeePayment", b =>
@@ -3013,7 +2649,7 @@ namespace SchoolManagement.API.Migrations
                             ParentId = 54,
                             RouteUrl = "/curriculum/plans",
                             SortOrder = 56,
-                            Title = "Courses"
+                            Title = "Course Plans"
                         },
                         new
                         {
@@ -3060,18 +2696,6 @@ namespace SchoolManagement.API.Migrations
                             RouteUrl = "/exams/papers",
                             SortOrder = 66,
                             Title = "Paper Setup"
-                        },
-                        new
-                        {
-                            MenuItemId = 58,
-                            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Icon = "library_books",
-                            IsActive = true,
-                            IsDeleted = false,
-                            ParentId = 34,
-                            RouteUrl = "/exams/question-bank",
-                            SortOrder = 67,
-                            Title = "Question Bank"
                         },
                         new
                         {
@@ -3711,24 +3335,6 @@ namespace SchoolManagement.API.Migrations
                         },
                         new
                         {
-                            Id = 211,
-                            MenuItemId = 58,
-                            RoleId = 2
-                        },
-                        new
-                        {
-                            Id = 212,
-                            MenuItemId = 58,
-                            RoleId = 3
-                        },
-                        new
-                        {
-                            Id = 213,
-                            MenuItemId = 58,
-                            RoleId = 4
-                        },
-                        new
-                        {
                             Id = 114,
                             MenuItemId = 36,
                             RoleId = 2
@@ -3996,7 +3602,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 1,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(5694),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(3447),
                             EndTime = new TimeOnly(8, 40, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4008,7 +3614,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 2,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9278),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6254),
                             EndTime = new TimeOnly(9, 20, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4020,7 +3626,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 3,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9286),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6261),
                             EndTime = new TimeOnly(10, 0, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4032,7 +3638,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 4,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9289),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6263),
                             EndTime = new TimeOnly(10, 20, 0),
                             IsActive = true,
                             IsBreak = true,
@@ -4044,7 +3650,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 5,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9330),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6265),
                             EndTime = new TimeOnly(11, 0, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4056,7 +3662,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 6,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9332),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6267),
                             EndTime = new TimeOnly(11, 40, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4068,7 +3674,7 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             PeriodId = 7,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 583, DateTimeKind.Utc).AddTicks(9335),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 10, 291, DateTimeKind.Utc).AddTicks(6268),
                             EndTime = new TimeOnly(12, 20, 0),
                             IsActive = true,
                             IsBreak = false,
@@ -4382,124 +3988,6 @@ namespace SchoolManagement.API.Migrations
                     b.ToTable("PurchaseReturnMasters");
                 });
 
-            modelBuilder.Entity("SchoolManagement.API.Models.QuestionBankItem", b =>
-                {
-                    b.Property<int>("QuestionBankItemId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("QuestionBankItemId"));
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("CorrectAnswer")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("CourseTopicId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InstituteId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<bool?>("IsTrue")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Language")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("Marks")
-                        .HasColumnType("int");
-
-                    b.Property<string>("QuestionNote")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("QuestionText")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("QuestionType")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.HasKey("QuestionBankItemId");
-
-                    b.HasIndex("CourseTopicId");
-
-                    b.ToTable("QuestionBankItems");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.QuestionBankOption", b =>
-                {
-                    b.Property<int>("QuestionBankOptionId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("QuestionBankOptionId"));
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InstituteId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsCorrect")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("OptionLabel")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("OptionText")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("QuestionBankItemId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.HasKey("QuestionBankOptionId");
-
-                    b.HasIndex("QuestionBankItemId");
-
-                    b.ToTable("QuestionBankOptions");
-                });
-
             modelBuilder.Entity("SchoolManagement.API.Models.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
@@ -4557,42 +4045,42 @@ namespace SchoolManagement.API.Migrations
                         new
                         {
                             RoleId = 1,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(1136),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(4533),
                             IsActive = true,
                             RoleName = "superadmin"
                         },
                         new
                         {
                             RoleId = 2,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2073),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5536),
                             IsActive = true,
                             RoleName = "admin"
                         },
                         new
                         {
                             RoleId = 3,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2077),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5540),
                             IsActive = true,
                             RoleName = "principal"
                         },
                         new
                         {
                             RoleId = 4,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2079),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5542),
                             IsActive = true,
                             RoleName = "teacher"
                         },
                         new
                         {
                             RoleId = 5,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2080),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5544),
                             IsActive = true,
                             RoleName = "parent"
                         },
                         new
                         {
                             RoleId = 6,
-                            CreatedAt = new DateTime(2026, 10, 2, 19, 33, 4, 326, DateTimeKind.Utc).AddTicks(2081),
+                            CreatedAt = new DateTime(2026, 10, 1, 20, 31, 9, 978, DateTimeKind.Utc).AddTicks(5545),
                             IsActive = true,
                             RoleName = "staff"
                         });
@@ -5883,84 +5371,6 @@ namespace SchoolManagement.API.Migrations
                     b.ToTable("StudentGuardians");
                 });
 
-            modelBuilder.Entity("SchoolManagement.API.Models.StudentTopicPerformance", b =>
-                {
-                    b.Property<int>("StudentTopicPerformanceId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("StudentTopicPerformanceId"));
-
-                    b.Property<int>("AcademicYearId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ClassId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("CourseTopicId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("CreatedBy")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("InstituteId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<DateOnly>("PerformanceDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("PerformanceType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Remarks")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ResultStatus")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("StudentId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SubjectId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TeacherId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedBy")
-                        .HasColumnType("int");
-
-                    b.HasKey("StudentTopicPerformanceId");
-
-                    b.HasIndex("AcademicYearId");
-
-                    b.HasIndex("ClassId");
-
-                    b.HasIndex("SubjectId");
-
-                    b.HasIndex("TeacherId");
-
-                    b.HasIndex("CourseTopicId", "PerformanceDate");
-
-                    b.HasIndex("StudentId", "CourseTopicId", "PerformanceDate");
-
-                    b.ToTable("StudentTopicPerformances");
-                });
-
             modelBuilder.Entity("SchoolManagement.API.Models.Subject", b =>
                 {
                     b.Property<int>("SubjectId")
@@ -6304,7 +5714,7 @@ namespace SchoolManagement.API.Migrations
                             IsActive = true,
                             IsDeleted = false,
                             Password = "Admin@123",
-                            PasswordHash = "$2a$11$Bp3zdA9zOZSm0PfUdY6vFO7wAq6JRy7SeWiobLaG8vCLU6SAfrSTG",
+                            PasswordHash = "$2a$11$1XGVcYFgEPjfL.Yf3ARV0ul2AR6SSBHSEExdWUAqyxCtcmxA4YP7m",
                             RoleId = 1
                         });
                 });
@@ -6436,74 +5846,6 @@ namespace SchoolManagement.API.Migrations
                     b.HasOne("SchoolManagement.API.Models.AcademicYear", null)
                         .WithMany("Classes")
                         .HasForeignKey("AcademicYearId");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.ClassAssessment", b =>
-                {
-                    b.HasOne("SchoolManagement.API.Models.AcademicYear", "AcademicYear")
-                        .WithMany()
-                        .HasForeignKey("AcademicYearId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.Class", "Class")
-                        .WithMany()
-                        .HasForeignKey("ClassId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.CourseTeachingLog", "CourseTeachingLog")
-                        .WithMany()
-                        .HasForeignKey("CourseTeachingLogId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("SchoolManagement.API.Models.CourseTopic", "CourseTopic")
-                        .WithMany()
-                        .HasForeignKey("CourseTopicId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("SchoolManagement.API.Models.Subject", "Subject")
-                        .WithMany()
-                        .HasForeignKey("SubjectId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.User", "Teacher")
-                        .WithMany()
-                        .HasForeignKey("TeacherId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AcademicYear");
-
-                    b.Navigation("Class");
-
-                    b.Navigation("CourseTeachingLog");
-
-                    b.Navigation("CourseTopic");
-
-                    b.Navigation("Subject");
-
-                    b.Navigation("Teacher");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.ClassAssessmentResult", b =>
-                {
-                    b.HasOne("SchoolManagement.API.Models.ClassAssessment", "ClassAssessment")
-                        .WithMany("Results")
-                        .HasForeignKey("ClassAssessmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.Student", "Student")
-                        .WithMany()
-                        .HasForeignKey("StudentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ClassAssessment");
-
-                    b.Navigation("Student");
                 });
 
             modelBuilder.Entity("SchoolManagement.API.Models.ClassSubject", b =>
@@ -6655,38 +5997,6 @@ namespace SchoolManagement.API.Migrations
                     b.Navigation("CourseChapter");
                 });
 
-            modelBuilder.Entity("SchoolManagement.API.Models.CourseTopicActivity", b =>
-                {
-                    b.HasOne("SchoolManagement.API.Models.CourseTopic", "CourseTopic")
-                        .WithMany("Activities")
-                        .HasForeignKey("CourseTopicId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.FileStore", "ExampleImage")
-                        .WithMany()
-                        .HasForeignKey("ExampleImageFileId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("SchoolManagement.API.Models.FileStore", "ReferenceImage")
-                        .WithMany()
-                        .HasForeignKey("ReferenceImageFileId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("SchoolManagement.API.Models.FileStore", "WorksheetFile")
-                        .WithMany()
-                        .HasForeignKey("WorksheetFileId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("CourseTopic");
-
-                    b.Navigation("ExampleImage");
-
-                    b.Navigation("ReferenceImage");
-
-                    b.Navigation("WorksheetFile");
-                });
-
             modelBuilder.Entity("SchoolManagement.API.Models.CourseTopicProgress", b =>
                 {
                     b.HasOne("SchoolManagement.API.Models.User", "CompletedByTeacher")
@@ -6782,11 +6092,6 @@ namespace SchoolManagement.API.Migrations
 
             modelBuilder.Entity("SchoolManagement.API.Models.ExamQuestion", b =>
                 {
-                    b.HasOne("SchoolManagement.API.Models.CourseTopic", "CourseTopic")
-                        .WithMany()
-                        .HasForeignKey("CourseTopicId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("SchoolManagement.API.Models.ExamPaper", "ExamPaper")
                         .WithMany("Questions")
                         .HasForeignKey("ExamPaperId")
@@ -6797,8 +6102,6 @@ namespace SchoolManagement.API.Migrations
                         .WithMany("Questions")
                         .HasForeignKey("ExamPaperSectionId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("CourseTopic");
 
                     b.Navigation("ExamPaper");
 
@@ -6858,31 +6161,6 @@ namespace SchoolManagement.API.Migrations
                     b.Navigation("ExamPaper");
 
                     b.Navigation("InvigilatorUser");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.ExamSyllabusItem", b =>
-                {
-                    b.HasOne("SchoolManagement.API.Models.CourseChapter", "CourseChapter")
-                        .WithMany()
-                        .HasForeignKey("CourseChapterId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("SchoolManagement.API.Models.CourseTopic", "CourseTopic")
-                        .WithMany()
-                        .HasForeignKey("CourseTopicId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("SchoolManagement.API.Models.ExamPaper", "ExamPaper")
-                        .WithMany()
-                        .HasForeignKey("ExamPaperId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CourseChapter");
-
-                    b.Navigation("CourseTopic");
-
-                    b.Navigation("ExamPaper");
                 });
 
             modelBuilder.Entity("SchoolManagement.API.Models.FeePayment", b =>
@@ -7149,28 +6427,6 @@ namespace SchoolManagement.API.Migrations
                     b.Navigation("Purchase");
 
                     b.Navigation("Supplier");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.QuestionBankItem", b =>
-                {
-                    b.HasOne("SchoolManagement.API.Models.CourseTopic", "CourseTopic")
-                        .WithMany()
-                        .HasForeignKey("CourseTopicId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("CourseTopic");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.QuestionBankOption", b =>
-                {
-                    b.HasOne("SchoolManagement.API.Models.QuestionBankItem", "QuestionBankItem")
-                        .WithMany("Options")
-                        .HasForeignKey("QuestionBankItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("QuestionBankItem");
                 });
 
             modelBuilder.Entity("SchoolManagement.API.Models.RefreshToken", b =>
@@ -7473,57 +6729,6 @@ namespace SchoolManagement.API.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("SchoolManagement.API.Models.StudentTopicPerformance", b =>
-                {
-                    b.HasOne("SchoolManagement.API.Models.AcademicYear", "AcademicYear")
-                        .WithMany()
-                        .HasForeignKey("AcademicYearId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.Class", "Class")
-                        .WithMany()
-                        .HasForeignKey("ClassId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.CourseTopic", "CourseTopic")
-                        .WithMany()
-                        .HasForeignKey("CourseTopicId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.Student", "Student")
-                        .WithMany()
-                        .HasForeignKey("StudentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.Subject", "Subject")
-                        .WithMany()
-                        .HasForeignKey("SubjectId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SchoolManagement.API.Models.User", "Teacher")
-                        .WithMany()
-                        .HasForeignKey("TeacherId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AcademicYear");
-
-                    b.Navigation("Class");
-
-                    b.Navigation("CourseTopic");
-
-                    b.Navigation("Student");
-
-                    b.Navigation("Subject");
-
-                    b.Navigation("Teacher");
-                });
-
             modelBuilder.Entity("SchoolManagement.API.Models.TimetableSubstitution", b =>
                 {
                     b.HasOne("SchoolManagement.API.Models.User", "SubstituteTeacher")
@@ -7604,11 +6809,6 @@ namespace SchoolManagement.API.Migrations
                     b.Navigation("Enrollments");
                 });
 
-            modelBuilder.Entity("SchoolManagement.API.Models.ClassAssessment", b =>
-                {
-                    b.Navigation("Results");
-                });
-
             modelBuilder.Entity("SchoolManagement.API.Models.CourseChapter", b =>
                 {
                     b.Navigation("Materials");
@@ -7623,8 +6823,6 @@ namespace SchoolManagement.API.Migrations
 
             modelBuilder.Entity("SchoolManagement.API.Models.CourseTopic", b =>
                 {
-                    b.Navigation("Activities");
-
                     b.Navigation("Materials");
 
                     b.Navigation("Progress");
@@ -7693,11 +6891,6 @@ namespace SchoolManagement.API.Migrations
             modelBuilder.Entity("SchoolManagement.API.Models.PurchaseReturnMaster", b =>
                 {
                     b.Navigation("Details");
-                });
-
-            modelBuilder.Entity("SchoolManagement.API.Models.QuestionBankItem", b =>
-                {
-                    b.Navigation("Options");
                 });
 
             modelBuilder.Entity("SchoolManagement.API.Models.Role", b =>

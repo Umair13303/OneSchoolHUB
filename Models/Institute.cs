@@ -22,6 +22,7 @@ public class Institute : BaseEntity
     public bool ModuleTimetable  { get; set; } = true;
     public bool ModuleHR         { get; set; } = true;
     public bool ModuleReports    { get; set; } = true;
+    public bool ModuleCurriculum { get; set; } = true;
 
     // Challan print template assigned by superadmin
     public string ChallanTemplate { get; set; } = "cash_memo";

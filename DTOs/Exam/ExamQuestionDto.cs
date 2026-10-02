@@ -26,6 +26,8 @@ public class ExamQuestionDto
     public string?          CorrectAnswer       { get; set; }
     public bool?            IsTrue              { get; set; }
     public string?          QuestionNote        { get; set; }
+    public int?             CourseTopicId       { get; set; }
+    public string?          TopicTitle          { get; set; }
     public List<ExamQuestionOptionDto> Options  { get; set; } = new();
 }
 
@@ -51,6 +53,7 @@ public class CreateExamQuestionDto
     public string?     CorrectAnswer      { get; set; }
     public bool?       IsTrue             { get; set; }
     public string?     QuestionNote       { get; set; }
+    public int?        CourseTopicId      { get; set; }
 
     /// <summary>For MultipleChoice — must supply exactly 4 options with one IsCorrect=true.</summary>
     public List<CreateExamQuestionOptionDto> Options { get; set; } = new();
@@ -66,6 +69,7 @@ public class UpdateExamQuestionDto
     public string?     CorrectAnswer      { get; set; }
     public bool?       IsTrue             { get; set; }
     public string?     QuestionNote       { get; set; }
+    public int?        CourseTopicId      { get; set; }
     public List<CreateExamQuestionOptionDto>? Options { get; set; }
 }
 
