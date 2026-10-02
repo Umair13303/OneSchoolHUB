@@ -21,4 +21,5 @@ public class UserInfoDto
     public string? Tagline { get; set; }
     public string? LogoUrl { get; set; }
     public string? CopyrightText { get; set; }
+    public int? PhotoFileId { get; set; }
 }

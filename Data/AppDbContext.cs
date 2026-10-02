@@ -543,6 +543,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<MenuItem>().HasKey(m => m.MenuItemId);
         modelBuilder.Entity<Role>().HasKey(r => r.RoleId);
         modelBuilder.Entity<User>().HasKey(u => u.UserId);
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.Photo).WithMany().HasForeignKey(u => u.PhotoFileId)
+            .IsRequired(false).OnDelete(DeleteBehavior.SetNull);
 
         // Seed Roles
         modelBuilder.Entity<Role>().HasData(

@@ -85,14 +85,57 @@ public class UserController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Get logged-in user profile</summary>
+    /// <summary>Get logged-in user profile (no password)</summary>
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
-        var user = await _userService.GetByIdAsync(userId);
+        var user = await _userService.GetProfileAsync(userId);
         if (user == null) return NotFound();
         return Ok(user);
+    }
+
+    /// <summary>Update logged-in user's personal information</summary>
+    [HttpPut("me")]
+    public async Task<IActionResult> UpdateMe([FromBody] UpdateMyProfileDto dto)
+    {
+        try
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+            var user = await _userService.UpdateMyProfileAsync(userId, dto);
+            if (user == null) return NotFound();
+            return Ok(user);
+        }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+        catch (ArgumentException ex)         { return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>Change logged-in user's password</summary>
+    [HttpPut("me/password")]
+    public async Task<IActionResult> ChangeMyPassword([FromBody] ChangeMyPasswordDto dto)
+    {
+        try
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+            await _userService.ChangeMyPasswordAsync(userId, dto);
+            return Ok(new { message = "Password updated." });
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (ArgumentException ex)         { return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>Set logged-in user's profile photo (FileStore id from FileServer upload)</summary>
+    [HttpPut("me/photo")]
+    public async Task<IActionResult> UpdateMyPhoto([FromBody] UpdateMyPhotoDto dto)
+    {
+        try
+        {
+            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+            var user = await _userService.UpdateMyPhotoAsync(userId, dto.PhotoFileId);
+            if (user == null) return NotFound();
+            return Ok(user);
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     /// <summary>Upload signature image for a user</summary>

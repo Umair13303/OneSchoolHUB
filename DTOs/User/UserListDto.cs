@@ -21,4 +21,5 @@ public class UserListDto
     public DateOnly? DateOfBirth { get; set; }
     public DateOnly? JoiningDate { get; set; }
     public string? SignatureUrl { get; set; }
+    public int? PhotoFileId { get; set; }
 }

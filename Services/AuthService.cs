@@ -189,7 +189,8 @@ public class AuthService : IAuthService
                 InstituteName = instituteName,
                 Tagline       = tagline,
                 LogoUrl       = string.IsNullOrEmpty(logoUrl) ? null : logoUrl,
-                CopyrightText = string.IsNullOrEmpty(copyrightText) ? null : copyrightText
+                CopyrightText = string.IsNullOrEmpty(copyrightText) ? null : copyrightText,
+                PhotoFileId   = user.PhotoFileId
             }
         };
     }
