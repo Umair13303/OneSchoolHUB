@@ -231,6 +231,44 @@ app.MapHub<ChatHub>("/hubs/chat", options =>
                        | HttpTransportType.LongPolling;
 });
 
+// Production does not run EF MigrateAsync. Apply ONLY AddUserProfilePhoto schema
+// (Users.PhotoFileId) before listening so login does not 500 on a missing column.
+// Idempotent / additive only — no PasswordHash, seed, or other migrations.
+const string ensureUserPhotoSql = @"
+IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NULL
+    ALTER TABLE [Users] ADD [PhotoFileId] int NULL;
+
+IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NOT NULL
+AND NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = N'IX_Users_PhotoFileId' AND object_id = OBJECT_ID(N'dbo.Users'))
+    CREATE INDEX [IX_Users_PhotoFileId] ON [Users] ([PhotoFileId]);
+
+IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NOT NULL
+AND OBJECT_ID(N'dbo.FileStores') IS NOT NULL
+AND NOT EXISTS (
+    SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Users_FileStores_PhotoFileId')
+    ALTER TABLE [Users] ADD CONSTRAINT [FK_Users_FileStores_PhotoFileId]
+        FOREIGN KEY ([PhotoFileId]) REFERENCES [FileStores] ([FileId]) ON DELETE SET NULL;
+
+IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NOT NULL
+AND NOT EXISTS (
+    SELECT 1 FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002203649_AddUserProfilePhoto')
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261002203649_AddUserProfilePhoto', N'9.0.0');
+";
+try
+{
+    using var photoScope = app.Services.CreateScope();
+    var photoDb = photoScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await photoDb.Database.ExecuteSqlRawAsync(ensureUserPhotoSql);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Users.PhotoFileId ensure warning: {ex.Message}");
+}
+
 // ── Background Database initialization (non-blocking for fast IIS startup) ────
 _ = Task.Run(async () =>
 {
