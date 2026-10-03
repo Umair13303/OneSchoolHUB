@@ -18,6 +18,41 @@ jobs:
       - name: Publish App
         run: dotnet publish -c Release -o ./publish-out
 
+      # IIS locks running DLLs; app_offline.htm stops the site so FTP can replace files.
+      - name: Stage app_offline.htm
+        run: |
+          printf '%s\n' '<!DOCTYPE html><html><body><h1>OneSchool API updating&hellip;</h1></body></html>' > ./publish-out/app_offline.htm
+
+      - name: Stop site before FTP (upload app_offline.htm)
+        env:
+          FTP_HOST: ${{ secrets.PUBLISH_URL }}
+          FTP_USER: ${{ secrets.PUBLISH_USER }}
+          FTP_PASS: ${{ secrets.PUBLISH_PWD }}
+        run: |
+          python3 <<'PY'
+          import ftplib, os, ssl, time
+          from io import BytesIO
+
+          host = os.environ["FTP_HOST"].replace("ftps://", "").replace("ftp://", "").split("/")[0]
+          user = os.environ["FTP_USER"]
+          pwd = os.environ["FTP_PASS"]
+
+          ftp = ftplib.FTP_TLS(context=ssl.create_default_context())
+          ftp.connect(host, 21, timeout=90)
+          ftp.login(user, pwd)
+          ftp.prot_p()
+          try:
+              ftp.cwd("/wwwroot")
+          except Exception:
+              pass
+
+          with open("./publish-out/app_offline.htm", "rb") as f:
+              ftp.storbinary("STOR app_offline.htm", f)
+          ftp.quit()
+          print("app_offline.htm uploaded; waiting for IIS recycle")
+          time.sleep(12)
+          PY
+
       - name: Upload to MonsterASP via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -28,3 +63,34 @@ jobs:
           local-dir: ./publish-out/
           server-dir: /wwwroot/
           dangerous-clean-slate: true
+
+      - name: Start site after FTP (remove app_offline.htm)
+        if: always()
+        env:
+          FTP_HOST: ${{ secrets.PUBLISH_URL }}
+          FTP_USER: ${{ secrets.PUBLISH_USER }}
+          FTP_PASS: ${{ secrets.PUBLISH_PWD }}
+        run: |
+          python3 <<'PY'
+          import ftplib, os, ssl
+
+          host = os.environ["FTP_HOST"].replace("ftps://", "").replace("ftp://", "").split("/")[0]
+          user = os.environ["FTP_USER"]
+          pwd = os.environ["FTP_PASS"]
+
+          ftp = ftplib.FTP_TLS(context=ssl.create_default_context())
+          ftp.connect(host, 21, timeout=90)
+          ftp.login(user, pwd)
+          ftp.prot_p()
+          try:
+              ftp.cwd("/wwwroot")
+          except Exception:
+              pass
+
+          try:
+              ftp.delete("app_offline.htm")
+              print("app_offline.htm removed — site online")
+          except Exception as e:
+              print(f"app_offline.htm delete warning: {e}")
+          ftp.quit()
+          PY
