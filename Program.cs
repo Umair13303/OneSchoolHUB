@@ -233,36 +233,39 @@ app.MapHub<ChatHub>("/hubs/chat", options =>
 
 // Production does not run EF MigrateAsync. Apply ONLY AddUserProfilePhoto schema
 // (Users.PhotoFileId) before listening so login does not 500 on a missing column.
+// Separate batches: SQL Server cannot compile CREATE INDEX on a column added in the same batch.
 // Idempotent / additive only — no PasswordHash, seed, or other migrations.
-const string ensureUserPhotoSql = @"
-IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NULL
-    ALTER TABLE [Users] ADD [PhotoFileId] int NULL;
+try
+{
+    using var photoScope = app.Services.CreateScope();
+    var photoDb = photoScope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NULL
+    ALTER TABLE [Users] ADD [PhotoFileId] int NULL;");
+
+    await photoDb.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NOT NULL
 AND NOT EXISTS (
     SELECT 1 FROM sys.indexes
     WHERE name = N'IX_Users_PhotoFileId' AND object_id = OBJECT_ID(N'dbo.Users'))
-    CREATE INDEX [IX_Users_PhotoFileId] ON [Users] ([PhotoFileId]);
+    CREATE INDEX [IX_Users_PhotoFileId] ON [Users] ([PhotoFileId]);");
 
+    await photoDb.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NOT NULL
 AND OBJECT_ID(N'dbo.FileStores') IS NOT NULL
 AND NOT EXISTS (
     SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Users_FileStores_PhotoFileId')
     ALTER TABLE [Users] ADD CONSTRAINT [FK_Users_FileStores_PhotoFileId]
-        FOREIGN KEY ([PhotoFileId]) REFERENCES [FileStores] ([FileId]) ON DELETE SET NULL;
+        FOREIGN KEY ([PhotoFileId]) REFERENCES [FileStores] ([FileId]) ON DELETE SET NULL;");
 
+    await photoDb.Database.ExecuteSqlRawAsync(@"
 IF COL_LENGTH('dbo.Users', 'PhotoFileId') IS NOT NULL
 AND NOT EXISTS (
     SELECT 1 FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20261002203649_AddUserProfilePhoto')
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261002203649_AddUserProfilePhoto', N'9.0.0');
-";
-try
-{
-    using var photoScope = app.Services.CreateScope();
-    var photoDb = photoScope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await photoDb.Database.ExecuteSqlRawAsync(ensureUserPhotoSql);
+    VALUES (N'20261002203649_AddUserProfilePhoto', N'9.0.0');");
 }
 catch (Exception ex)
 {

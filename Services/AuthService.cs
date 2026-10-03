@@ -31,17 +31,34 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request, HttpContext? httpContext = null)
     {
-        var user = await _db.Users
+        // Project only columns required for auth. Avoid selecting Users.PhotoFileId so login
+        // still works if that column has not been applied on production yet.
+        var row = await _db.Users
             .IgnoreQueryFilters()
-            .Include(u => u.Role)
-            .Include(u => u.Institute)
-            .FirstOrDefaultAsync(u => u.Email == request.Email && u.IsActive && !u.IsDeleted);
+            .AsNoTracking()
+            .Where(u => u.Email == request.Email && u.IsActive && !u.IsDeleted)
+            .Select(u => new
+            {
+                u.UserId,
+                u.FullName,
+                u.Email,
+                u.PasswordHash,
+                u.RoleId,
+                u.InstituteId,
+                u.CampusId,
+                RoleName = u.Role.RoleName,
+                Institute = u.Institute
+            })
+            .FirstOrDefaultAsync();
 
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        if (row == null || !BCrypt.Net.BCrypt.Verify(request.Password, row.PasswordHash))
             return null;
 
-        if (IsLicenseExpired(user.Institute))
+        if (IsLicenseExpired(row.Institute))
             throw new UnauthorizedAccessException("Your school's license has expired. Please contact the system administrator to renew it.");
+
+        var user = ToAuthUser(row.UserId, row.FullName, row.Email, row.RoleId, row.RoleName,
+            row.InstituteId, row.CampusId, row.Institute);
 
         var ip = httpContext?.Connection?.RemoteIpAddress?.ToString();
         var ua = httpContext?.Request?.Headers["User-Agent"].ToString();
@@ -87,16 +104,44 @@ public class AuthService : IAuthService
         storedToken.IsRevoked = true;
         await _db.SaveChangesAsync();
 
-        var user = await _db.Users
+        var row = await _db.Users
             .IgnoreQueryFilters()
-            .Include(u => u.Role)
-            .Include(u => u.Institute)
-            .FirstOrDefaultAsync(u => u.UserId == userId && u.IsActive && !u.IsDeleted);
+            .AsNoTracking()
+            .Where(u => u.UserId == userId && u.IsActive && !u.IsDeleted)
+            .Select(u => new
+            {
+                u.UserId,
+                u.FullName,
+                u.Email,
+                u.RoleId,
+                u.InstituteId,
+                u.CampusId,
+                RoleName = u.Role.RoleName,
+                Institute = u.Institute
+            })
+            .FirstOrDefaultAsync();
 
-        if (user == null || IsLicenseExpired(user.Institute)) return null;
+        if (row == null || IsLicenseExpired(row.Institute)) return null;
 
+        var user = ToAuthUser(row.UserId, row.FullName, row.Email, row.RoleId, row.RoleName,
+            row.InstituteId, row.CampusId, row.Institute);
         return await GenerateTokensAsync(user);
     }
+
+    private static User ToAuthUser(
+        int userId, string fullName, string email, int roleId, string roleName,
+        int? instituteId, int? campusId, Institute? institute) =>
+        new()
+        {
+            UserId = userId,
+            FullName = fullName,
+            Email = email,
+            RoleId = roleId,
+            InstituteId = instituteId,
+            CampusId = campusId,
+            Role = new Role { RoleId = roleId, RoleName = roleName },
+            Institute = institute
+        };
 
     // License is valid through the end of LicenseValidUntil's date; null means unlimited.
     private static bool IsLicenseExpired(Models.Institute? institute) =>
