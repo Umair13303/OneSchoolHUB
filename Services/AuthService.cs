@@ -47,18 +47,33 @@ public class AuthService : IAuthService
                 u.InstituteId,
                 u.CampusId,
                 RoleName = u.Role.RoleName,
-                Institute = u.Institute
+                // Only columns required for auth/license — avoid Institute.ModuleCurriculum etc.
+                InstituteName = u.Institute != null ? u.Institute.Name : null,
+                InstituteLogoUrl = u.Institute != null ? u.Institute.LogoUrl : null,
+                LicenseValidUntil = u.Institute != null ? u.Institute.LicenseValidUntil : null
             })
             .FirstOrDefaultAsync();
 
         if (row == null || !BCrypt.Net.BCrypt.Verify(request.Password, row.PasswordHash))
             return null;
 
-        if (IsLicenseExpired(row.Institute))
+        Institute? institute = null;
+        if (row.InstituteId != null)
+        {
+            institute = new Institute
+            {
+                InstituteId = row.InstituteId.Value,
+                Name = row.InstituteName ?? string.Empty,
+                LogoUrl = row.InstituteLogoUrl,
+                LicenseValidUntil = row.LicenseValidUntil
+            };
+        }
+
+        if (IsLicenseExpired(institute))
             throw new UnauthorizedAccessException("Your school's license has expired. Please contact the system administrator to renew it.");
 
         var user = ToAuthUser(row.UserId, row.FullName, row.Email, row.RoleId, row.RoleName,
-            row.InstituteId, row.CampusId, row.Institute);
+            row.InstituteId, row.CampusId, institute);
 
         var ip = httpContext?.Connection?.RemoteIpAddress?.ToString();
         var ua = httpContext?.Request?.Headers["User-Agent"].ToString();
@@ -117,14 +132,28 @@ public class AuthService : IAuthService
                 u.InstituteId,
                 u.CampusId,
                 RoleName = u.Role.RoleName,
-                Institute = u.Institute
+                InstituteName = u.Institute != null ? u.Institute.Name : null,
+                InstituteLogoUrl = u.Institute != null ? u.Institute.LogoUrl : null,
+                LicenseValidUntil = u.Institute != null ? u.Institute.LicenseValidUntil : null
             })
             .FirstOrDefaultAsync();
 
-        if (row == null || IsLicenseExpired(row.Institute)) return null;
+        Institute? institute = null;
+        if (row?.InstituteId != null)
+        {
+            institute = new Institute
+            {
+                InstituteId = row.InstituteId.Value,
+                Name = row.InstituteName ?? string.Empty,
+                LogoUrl = row.InstituteLogoUrl,
+                LicenseValidUntil = row.LicenseValidUntil
+            };
+        }
+
+        if (row == null || IsLicenseExpired(institute)) return null;
 
         var user = ToAuthUser(row.UserId, row.FullName, row.Email, row.RoleId, row.RoleName,
-            row.InstituteId, row.CampusId, row.Institute);
+            row.InstituteId, row.CampusId, institute);
         return await GenerateTokensAsync(user);
     }
 

@@ -266,6 +266,13 @@ AND NOT EXISTS (
     WHERE [MigrationId] = N'20261002203649_AddUserProfilePhoto')
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261002203649_AddUserProfilePhoto', N'9.0.0');");
+
+    // Login/menu touch Institutes.ModuleCurriculum (from AddCurriculumModule) without
+    // applying the full curriculum migration set.
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH('dbo.Institutes', 'ModuleCurriculum') IS NULL
+    ALTER TABLE [Institutes] ADD [ModuleCurriculum] bit NOT NULL
+        CONSTRAINT [DF_Institutes_ModuleCurriculum] DEFAULT (1);");
 }
 catch (Exception ex)
 {
