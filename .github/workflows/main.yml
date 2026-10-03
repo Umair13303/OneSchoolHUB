@@ -31,13 +31,17 @@ jobs:
         run: |
           python3 <<'PY'
           import ftplib, os, ssl, time
-          from io import BytesIO
 
           host = os.environ["FTP_HOST"].replace("ftps://", "").replace("ftp://", "").split("/")[0]
           user = os.environ["FTP_USER"]
           pwd = os.environ["FTP_PASS"]
 
-          ftp = ftplib.FTP_TLS(context=ssl.create_default_context())
+          # MonsterASP FTPS uses a host cert GitHub runners do not trust.
+          ctx = ssl.create_default_context()
+          ctx.check_hostname = False
+          ctx.verify_mode = ssl.CERT_NONE
+
+          ftp = ftplib.FTP_TLS(context=ctx)
           ftp.connect(host, 21, timeout=90)
           ftp.login(user, pwd)
           ftp.prot_p()
@@ -78,7 +82,11 @@ jobs:
           user = os.environ["FTP_USER"]
           pwd = os.environ["FTP_PASS"]
 
-          ftp = ftplib.FTP_TLS(context=ssl.create_default_context())
+          ctx = ssl.create_default_context()
+          ctx.check_hostname = False
+          ctx.verify_mode = ssl.CERT_NONE
+
+          ftp = ftplib.FTP_TLS(context=ctx)
           ftp.connect(host, 21, timeout=90)
           ftp.login(user, pwd)
           ftp.prot_p()
