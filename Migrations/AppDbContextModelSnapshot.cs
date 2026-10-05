@@ -2687,6 +2687,17 @@ namespace SchoolManagement.API.Migrations
                         },
                         new
                         {
+                            MenuItemId = 59,
+                            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Icon = "play_lesson",
+                            IsActive = true,
+                            IsDeleted = false,
+                            RouteUrl = "/classroom/today",
+                            SortOrder = 12,
+                            Title = "Classroom"
+                        },
+                        new
+                        {
                             MenuItemId = 2,
                             CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Icon = "people",
@@ -3228,6 +3239,12 @@ namespace SchoolManagement.API.Migrations
                             Id = 6,
                             MenuItemId = 1,
                             RoleId = 6
+                        },
+                        new
+                        {
+                            Id = 214,
+                            MenuItemId = 59,
+                            RoleId = 4
                         },
                         new
                         {

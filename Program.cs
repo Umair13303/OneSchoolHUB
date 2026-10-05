@@ -231,10 +231,11 @@ app.MapHub<ChatHub>("/hubs/chat", options =>
                        | HttpTransportType.LongPolling;
 });
 
-// Production does not run EF MigrateAsync. Apply ONLY AddUserProfilePhoto schema
-// (Users.PhotoFileId) before listening so login does not 500 on a missing column.
+// Production does not run EF MigrateAsync. Apply ONLY selective idempotent ensures
+// (Users.PhotoFileId, Institutes.ModuleCurriculum, Classroom menu insert-only)
+// before listening so login/menu do not fail on a missing column/row.
 // Separate batches: SQL Server cannot compile CREATE INDEX on a column added in the same batch.
-// Idempotent / additive only — no PasswordHash, seed, or other migrations.
+// Idempotent / additive only — no PasswordHash resets or full migration apply.
 try
 {
     using var photoScope = app.Services.CreateScope();
@@ -273,6 +274,20 @@ AND NOT EXISTS (
 IF COL_LENGTH('dbo.Institutes', 'ModuleCurriculum') IS NULL
     ALTER TABLE [Institutes] ADD [ModuleCurriculum] bit NOT NULL
         CONSTRAINT [DF_Institutes_ModuleCurriculum] DEFAULT (1);");
+
+    // Classroom menu (Teacher Daily Workflow). Insert-only — never UPDATE existing
+    // MenuItem 59 / permission 214 so admin customizations are preserved.
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+SET IDENTITY_INSERT MenuItems ON;
+IF NOT EXISTS (SELECT 1 FROM MenuItems WHERE MenuItemId = 59)
+INSERT INTO MenuItems (MenuItemId, ParentId, Title, Icon, RouteUrl, SortOrder, IsActive, IsDeleted, CreatedAt, CampusId, InstituteId, CreatedBy, UpdatedAt, UpdatedBy)
+VALUES (59, NULL, N'Classroom', N'play_lesson', N'/classroom/today', 12, 1, 0, '2025-01-01', NULL, NULL, NULL, NULL, NULL);
+SET IDENTITY_INSERT MenuItems OFF;
+
+SET IDENTITY_INSERT MenuRolePermissions ON;
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE Id = 214)
+INSERT INTO MenuRolePermissions (Id, MenuItemId, RoleId) VALUES (214, 59, 4);
+SET IDENTITY_INSERT MenuRolePermissions OFF;");
 }
 catch (Exception ex)
 {
