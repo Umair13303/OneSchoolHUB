@@ -595,6 +595,7 @@ public class AppDbContext : DbContext
 
             // Roots
             new MenuItem { MenuItemId = 1,  ParentId = null, Title = "Dashboard",        Icon = "dashboard",      RouteUrl = "/dashboard",          SortOrder = 10, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 59, ParentId = null, Title = "Classroom",        Icon = "play_lesson",    RouteUrl = "/classroom/today",    SortOrder = 12, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 2,  ParentId = null, Title = "Users",            Icon = "people",         RouteUrl = "/users",              SortOrder = 20, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 3,  ParentId = null, Title = "Academics",        Icon = "school",         RouteUrl = null,                  SortOrder = 30, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 25, ParentId = null, Title = "Teachers",         Icon = "badge",          RouteUrl = "/teachers",           SortOrder = 35, IsActive = true, IsDeleted = true,  CreatedAt = seedTs },
@@ -667,6 +668,9 @@ public class AppDbContext : DbContext
             new MenuRolePermission { Id = 4,  MenuItemId = 1, RoleId = 4 },
             new MenuRolePermission { Id = 5,  MenuItemId = 1, RoleId = 5 },
             new MenuRolePermission { Id = 6,  MenuItemId = 1, RoleId = 6 },
+
+            // Classroom (59) → Teacher only
+            new MenuRolePermission { Id = 214, MenuItemId = 59, RoleId = 4 },
 
             // Users (2) → SuperAdmin, Admin
             new MenuRolePermission { Id = 7,  MenuItemId = 2, RoleId = 1 },

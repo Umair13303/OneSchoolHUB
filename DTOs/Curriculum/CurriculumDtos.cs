@@ -24,6 +24,21 @@ public class CoursePlanDetailDto : CoursePlanListDto
     public List<CourseChapterDto> Chapters { get; set; } = new();
 }
 
+/// <summary>Teacher ClassSubject slot with optional existing Course Plan.</summary>
+public class TeacherCourseSlotDto
+{
+    public int ClassId { get; set; }
+    public string ClassName { get; set; } = string.Empty;
+    public string? Section { get; set; }
+    public int SubjectId { get; set; }
+    public string SubjectName { get; set; } = string.Empty;
+    public int AcademicYearId { get; set; }
+    public string YearLabel { get; set; } = string.Empty;
+    public int? CoursePlanId { get; set; }
+    public string? PlanStatus { get; set; }
+    public string? PlanTitle { get; set; }
+}
+
 public class CreateCoursePlanDto
 {
     public int AcademicYearId { get; set; }

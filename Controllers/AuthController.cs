@@ -44,12 +44,14 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Logout — revoke refresh token</summary>
+    /// <summary>Logout — revoke refresh token. AllowAnonymous so an expired
+    /// access token still lets the client revoke the refresh token.</summary>
     [HttpPost("logout")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<IActionResult> Logout([FromBody] string refreshToken)
     {
-        await _authService.RevokeTokenAsync(refreshToken, HttpContext);
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+            await _authService.RevokeTokenAsync(refreshToken, HttpContext);
         return Ok(new { message = "Logged out successfully." });
     }
 }

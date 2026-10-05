@@ -9,10 +9,17 @@ namespace SchoolManagement.API.Services;
 
 public interface IExamService
 {
+    // ── Teacher ClassSubject authorization (mirrors Curriculum / ClassroomAssessments) ──
+    Task EnsureTeacherCanAccessClassSubjectAsync(int teacherId, int classId, int subjectId);
+    Task EnsureTeacherCanAccessPaperAsync(int teacherId, int paperId);
+    Task EnsureTeacherCanAccessQuestionAsync(int teacherId, int questionId);
+    Task EnsureTeacherCanAccessTopicAsync(int teacherId, int topicId);
+    Task EnsureTeacherCanAccessQuestionBankItemAsync(int teacherId, int itemId);
+
     // ── Papers ─────────────────────────────────────────────────────────────────
     Task<ExamPaperDto>           CreatePaperAsync(CreateExamPaperDto dto, int userId);
     Task<ExamPaperDto?>          GetPaperByIdAsync(int paperId);
-    Task<List<ExamPaperListDto>> GetPapersAsync(int? classId, int? subjectId, int? academicYearId, ExamType? examType);
+    Task<List<ExamPaperListDto>> GetPapersAsync(int? classId, int? subjectId, int? academicYearId, ExamType? examType, int? teacherId = null);
     Task<bool>                   UpdatePaperAsync(int paperId, UpdateExamPaperDto dto, int userId);
     Task<bool>                   DeletePaperAsync(int paperId, int userId);
     Task<ExamPaperDto>           PublishPaperAsync(int paperId, int userId);
@@ -21,14 +28,14 @@ public interface IExamService
     Task<ExamScheduleDto>        CreateScheduleAsync(CreateExamScheduleDto dto, int userId);
     Task<bool>                   UpdateScheduleAsync(int scheduleId, UpdateExamScheduleDto dto, int userId);
     Task<bool>                   DeleteScheduleAsync(int scheduleId, int userId);
-    Task<List<ExamScheduleDto>>  GetSchedulesAsync(int? classId, DateOnly? fromDate, DateOnly? toDate);
+    Task<List<ExamScheduleDto>>  GetSchedulesAsync(int? classId, DateOnly? fromDate, DateOnly? toDate, int? teacherId = null);
 
     // ── Results ───────────────────────────────────────────────────────────────
     Task<ExamResultDto>          EnterResultAsync(EnterExamResultDto dto, int userId);
     Task<bool>                   BulkEnterResultsAsync(BulkEnterExamResultDto dto, int userId);
     Task<ClassResultSummaryDto>  GetClassResultSummaryAsync(int paperId);
-    Task<List<ExamResultDto>>    GetStudentResultsAsync(int studentId, int? academicYearId);
-    Task<StudentResultCardDto>   GetStudentResultCardAsync(int studentId, int academicYearId, ExamType examType);
+    Task<List<ExamResultDto>>    GetStudentResultsAsync(int studentId, int? academicYearId, int? teacherId = null);
+    Task<StudentResultCardDto>   GetStudentResultCardAsync(int studentId, int academicYearId, ExamType examType, int? teacherId = null);
     Task                         RecalculateRanksAsync(int paperId);
 
     // ── Questions ─────────────────────────────────────────────────────────────
@@ -41,7 +48,7 @@ public interface IExamService
     // ── Syllabus / Question Bank ─────────────────────────────────────────────
     Task<ExamSyllabusDto> GetSyllabusAsync(int paperId);
     Task<ExamSyllabusDto> SaveSyllabusAsync(int paperId, SaveExamSyllabusDto dto, int userId);
-    Task<List<QuestionBankItemDto>> ListQuestionBankAsync(int? topicId, string? search, bool? activeOnly);
+    Task<List<QuestionBankItemDto>> ListQuestionBankAsync(int? topicId, string? search, bool? activeOnly, int? teacherId = null);
     Task<QuestionBankItemDto> CreateQuestionBankItemAsync(CreateQuestionBankItemDto dto, int userId);
     Task<bool> UpdateQuestionBankItemAsync(int id, UpdateQuestionBankItemDto dto, int userId);
     Task<bool> DeleteQuestionBankItemAsync(int id, int userId);
@@ -52,6 +59,74 @@ public class ExamService : IExamService
 {
     private readonly AppDbContext _db;
     public ExamService(AppDbContext db) => _db = db;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TEACHER ClassSubject AUTHORIZATION
+    // Same ClassSubjects.Any + UnauthorizedAccessException pattern as
+    // CurriculumService / ClassroomAssessmentService.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public async Task EnsureTeacherCanAccessClassSubjectAsync(int teacherId, int classId, int subjectId)
+    {
+        if (!await IsTeacherAssignedAsync(teacherId, classId, subjectId))
+            throw new UnauthorizedAccessException("You are not assigned to this class/subject.");
+    }
+
+    public async Task EnsureTeacherCanAccessPaperAsync(int teacherId, int paperId)
+    {
+        var paper = await _db.ExamPapers.AsNoTracking()
+            .Where(p => p.ExamPaperId == paperId && !p.IsDeleted)
+            .Select(p => new { p.ClassId, p.SubjectId })
+            .FirstOrDefaultAsync()
+            ?? throw new ArgumentException("Exam paper not found.");
+        await EnsureTeacherCanAccessClassSubjectAsync(teacherId, paper.ClassId, paper.SubjectId);
+    }
+
+    public async Task EnsureTeacherCanAccessQuestionAsync(int teacherId, int questionId)
+    {
+        var paperId = await _db.ExamQuestions.AsNoTracking()
+            .Where(q => q.ExamQuestionId == questionId && !q.IsDeleted)
+            .Select(q => (int?)q.ExamPaperId)
+            .FirstOrDefaultAsync()
+            ?? throw new ArgumentException("Question not found.");
+        await EnsureTeacherCanAccessPaperAsync(teacherId, paperId);
+    }
+
+    public async Task EnsureTeacherCanAccessTopicAsync(int teacherId, int topicId)
+    {
+        var plan = await _db.CourseTopics.AsNoTracking()
+            .Where(t => t.CourseTopicId == topicId && !t.IsDeleted)
+            .Select(t => new { t.CourseChapter.CoursePlan.ClassId, t.CourseChapter.CoursePlan.SubjectId })
+            .FirstOrDefaultAsync()
+            ?? throw new ArgumentException("Topic not found.");
+        await EnsureTeacherCanAccessClassSubjectAsync(teacherId, plan.ClassId, plan.SubjectId);
+    }
+
+    public async Task EnsureTeacherCanAccessQuestionBankItemAsync(int teacherId, int itemId)
+    {
+        var topicId = await _db.QuestionBankItems.AsNoTracking()
+            .Where(i => i.QuestionBankItemId == itemId && !i.IsDeleted)
+            .Select(i => (int?)i.CourseTopicId)
+            .FirstOrDefaultAsync()
+            ?? throw new ArgumentException("Question bank item not found.");
+        await EnsureTeacherCanAccessTopicAsync(teacherId, topicId);
+    }
+
+    private async Task<bool> IsTeacherAssignedAsync(int teacherId, int classId, int subjectId)
+    {
+        return await _db.ClassSubjects.AnyAsync(cs =>
+            cs.TeacherId == teacherId &&
+            cs.ClassId == classId &&
+            cs.SubjectId == subjectId &&
+            cs.IsActive);
+    }
+
+    private IQueryable<ExamPaper> FilterPapersForTeacher(IQueryable<ExamPaper> q, int teacherId) =>
+        q.Where(p => _db.ClassSubjects.Any(cs =>
+            cs.TeacherId == teacherId &&
+            cs.ClassId == p.ClassId &&
+            cs.SubjectId == p.SubjectId &&
+            cs.IsActive));
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PAPERS
@@ -131,7 +206,7 @@ public class ExamService : IExamService
         return p is null ? null : MapPaper(p);
     }
 
-    public async Task<List<ExamPaperListDto>> GetPapersAsync(int? classId, int? subjectId, int? academicYearId, ExamType? examType)
+    public async Task<List<ExamPaperListDto>> GetPapersAsync(int? classId, int? subjectId, int? academicYearId, ExamType? examType, int? teacherId = null)
     {
         var q = _db.ExamPapers
             .Include(x => x.Class)
@@ -140,6 +215,7 @@ public class ExamService : IExamService
             .Include(x => x.Schedules)
             .Where(x => !x.IsDeleted);
 
+        if (teacherId is int tid)    q = FilterPapersForTeacher(q, tid);
         if (classId.HasValue)        q = q.Where(x => x.ClassId == classId.Value);
         if (subjectId.HasValue)      q = q.Where(x => x.SubjectId == subjectId.Value);
         if (academicYearId.HasValue) q = q.Where(x => x.AcademicYearId == academicYearId.Value);
@@ -272,13 +348,19 @@ public class ExamService : IExamService
         return true;
     }
 
-    public async Task<List<ExamScheduleDto>> GetSchedulesAsync(int? classId, DateOnly? fromDate, DateOnly? toDate)
+    public async Task<List<ExamScheduleDto>> GetSchedulesAsync(int? classId, DateOnly? fromDate, DateOnly? toDate, int? teacherId = null)
     {
         var q = _db.ExamSchedules
             .Include(s => s.ExamPaper).ThenInclude(p => p.Class)
             .Include(s => s.InvigilatorUser)
             .Where(s => !s.IsDeleted);
 
+        if (teacherId is int tid)
+            q = q.Where(s => _db.ClassSubjects.Any(cs =>
+                cs.TeacherId == tid &&
+                cs.ClassId == s.ExamPaper.ClassId &&
+                cs.SubjectId == s.ExamPaper.SubjectId &&
+                cs.IsActive));
         if (classId.HasValue)  q = q.Where(s => s.ExamPaper.ClassId == classId.Value);
         if (fromDate.HasValue) q = q.Where(s => s.ExamDate >= fromDate.Value);
         if (toDate.HasValue)   q = q.Where(s => s.ExamDate <= toDate.Value);
@@ -398,7 +480,7 @@ public class ExamService : IExamService
         };
     }
 
-    public async Task<List<ExamResultDto>> GetStudentResultsAsync(int studentId, int? academicYearId)
+    public async Task<List<ExamResultDto>> GetStudentResultsAsync(int studentId, int? academicYearId, int? teacherId = null)
     {
         var q = _db.ExamResults
             .Include(r => r.ExamPaper).ThenInclude(p => p.Class)
@@ -407,6 +489,12 @@ public class ExamService : IExamService
             .Include(r => r.EnteredByUser)
             .Where(r => r.StudentId == studentId && !r.ExamPaper.IsDeleted);
 
+        if (teacherId is int tid)
+            q = q.Where(r => _db.ClassSubjects.Any(cs =>
+                cs.TeacherId == tid &&
+                cs.ClassId == r.ExamPaper.ClassId &&
+                cs.SubjectId == r.ExamPaper.SubjectId &&
+                cs.IsActive));
         if (academicYearId.HasValue)
             q = q.Where(r => r.ExamPaper.AcademicYearId == academicYearId.Value);
 
@@ -414,7 +502,7 @@ public class ExamService : IExamService
         return list.Select(r => MapResult(r, r.ExamPaper)).ToList();
     }
 
-    public async Task<StudentResultCardDto> GetStudentResultCardAsync(int studentId, int academicYearId, ExamType examType)
+    public async Task<StudentResultCardDto> GetStudentResultCardAsync(int studentId, int academicYearId, ExamType examType, int? teacherId = null)
     {
         var student = await _db.Students
             .Include(s => s.Enrollments).ThenInclude(e => e.Class)
@@ -424,13 +512,21 @@ public class ExamService : IExamService
 
         var year = await _db.AcademicYears.FindAsync(academicYearId);
 
-        var results = await _db.ExamResults
+        var resultsQ = _db.ExamResults
             .Include(r => r.ExamPaper).ThenInclude(p => p.Subject)
             .Where(r => r.StudentId == studentId
                      && r.ExamPaper.AcademicYearId == academicYearId
                      && r.ExamPaper.ExamType == examType
-                     && !r.ExamPaper.IsDeleted)
-            .ToListAsync();
+                     && !r.ExamPaper.IsDeleted);
+
+        if (teacherId is int tid)
+            resultsQ = resultsQ.Where(r => _db.ClassSubjects.Any(cs =>
+                cs.TeacherId == tid &&
+                cs.ClassId == r.ExamPaper.ClassId &&
+                cs.SubjectId == r.ExamPaper.SubjectId &&
+                cs.IsActive));
+
+        var results = await resultsQ.ToListAsync();
 
         var enrollment = student.Enrollments
             .FirstOrDefault(e => e.AcademicYearId == academicYearId);
@@ -931,13 +1027,25 @@ public class ExamService : IExamService
     // QUESTION BANK
     // ═══════════════════════════════════════════════════════════════════════════
 
-    public async Task<List<QuestionBankItemDto>> ListQuestionBankAsync(int? topicId, string? search, bool? activeOnly)
+    public async Task<List<QuestionBankItemDto>> ListQuestionBankAsync(int? topicId, string? search, bool? activeOnly, int? teacherId = null)
     {
         var q = _db.QuestionBankItems.AsNoTracking()
             .Include(i => i.CourseTopic)
             .Include(i => i.Options)
             .Where(i => !i.IsDeleted)
             .AsQueryable();
+        if (teacherId is int tid)
+        {
+            var allowedTopicIds = await (
+                from t in _db.CourseTopics.AsNoTracking()
+                join ch in _db.CourseChapters.AsNoTracking() on t.CourseChapterId equals ch.CourseChapterId
+                join p in _db.CoursePlans.AsNoTracking() on ch.CoursePlanId equals p.CoursePlanId
+                join cs in _db.ClassSubjects.AsNoTracking() on new { p.ClassId, p.SubjectId } equals new { cs.ClassId, cs.SubjectId }
+                where cs.TeacherId == tid && cs.IsActive && !t.IsDeleted && !ch.IsDeleted && !p.IsDeleted
+                select t.CourseTopicId
+            ).Distinct().ToListAsync();
+            q = q.Where(i => allowedTopicIds.Contains(i.CourseTopicId));
+        }
         if (topicId is > 0) q = q.Where(i => i.CourseTopicId == topicId);
         if (activeOnly == true) q = q.Where(i => i.IsActive);
         if (!string.IsNullOrWhiteSpace(search))

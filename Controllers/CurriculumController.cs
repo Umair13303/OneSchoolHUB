@@ -8,7 +8,8 @@ namespace SchoolManagement.API.Controllers;
 
 /// <summary>
 /// Curriculum / Course Content module.
-/// Admin &amp; Principal manage Course Plans; Teachers update progress &amp; daily teaching via ClassSubject assignment.
+/// Admin &amp; Principal manage all Course Plans.
+/// Teachers may author course work for their assigned ClassSubject pairs.
 /// </summary>
 [ApiController]
 [Route("api/curriculum")]
@@ -29,7 +30,19 @@ public class CurriculumController : ControllerBase
         return roles.Contains("teacher") && !roles.Contains("admin") && !roles.Contains("principal") && !roles.Contains("superadmin");
     }
 
-    // ── Course Plans (Admin / Principal) ──────────────────────────────────────
+    private async Task<IActionResult?> ForbidTeacherUnlessAsync(Func<Task> ensure)
+    {
+        if (!IsTeacherOnly()) return null;
+        try
+        {
+            await ensure();
+            return null;
+        }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    // ── Course Plans ──────────────────────────────────────────────────────────
 
     [HttpGet("plans")]
     [Authorize(Roles = "admin,principal")]
@@ -49,7 +62,8 @@ public class CurriculumController : ControllerBase
     {
         if (IsTeacherOnly())
         {
-            var ws = await _service.GetWorkspaceAsync(id, CurrentUserId(), requirePublished: true);
+            // Teachers may open Draft + Published plans for assigned class/subject (authoring + teach).
+            var ws = await _service.GetWorkspaceAsync(id, CurrentUserId(), requirePublished: false);
             return ws is null ? NotFound() : Ok(ws);
         }
 
@@ -58,23 +72,30 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpPost("plans")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> CreatePlan([FromBody] CreateCoursePlanDto dto)
     {
         try
         {
+            if (IsTeacherOnly())
+                await _service.EnsureTeacherCanAuthorClassSubjectAsync(CurrentUserId(), dto.ClassId, dto.SubjectId);
+
             var result = await _service.CreatePlanAsync(dto, CurrentUserId());
             return CreatedAtAction(nameof(GetPlan), new { id = result.CoursePlanId }, result);
         }
+        catch (UnauthorizedAccessException) { return Forbid(); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpPut("plans/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> UpdatePlan(int id, [FromBody] UpdateCoursePlanDto dto)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorPlanAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
+
             var ok = await _service.UpdatePlanAsync(id, dto, CurrentUserId());
             return ok ? Ok(new { message = "Updated." }) : NotFound();
         }
@@ -82,11 +103,14 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpPost("plans/{id:int}/publish")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> Publish(int id)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorPlanAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
+
             var ok = await _service.PublishPlanAsync(id, CurrentUserId());
             return ok ? Ok(new { message = "Published." }) : NotFound();
         }
@@ -116,19 +140,26 @@ public class CurriculumController : ControllerBase
     // ── Chapters ──────────────────────────────────────────────────────────────
 
     [HttpPost("chapters")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> CreateChapter([FromBody] CreateCourseChapterDto dto)
     {
-        try { return Ok(await _service.CreateChapterAsync(dto, CurrentUserId())); }
+        try
+        {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorPlanAsync(CurrentUserId(), dto.CoursePlanId));
+            if (blocked is not null) return blocked;
+            return Ok(await _service.CreateChapterAsync(dto, CurrentUserId()));
+        }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpPut("chapters/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> UpdateChapter(int id, [FromBody] UpdateCourseChapterDto dto)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorChapterAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
             var ok = await _service.UpdateChapterAsync(id, dto, CurrentUserId());
             return ok ? Ok(new { message = "Updated." }) : NotFound();
         }
@@ -136,11 +167,13 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpDelete("chapters/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> DeleteChapter(int id)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorChapterAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
             var ok = await _service.SoftDeleteChapterAsync(id, CurrentUserId());
             return ok ? Ok(new { message = "Deleted." }) : NotFound();
         }
@@ -148,11 +181,13 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpPut("plans/{planId:int}/chapters/reorder")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> ReorderChapters(int planId, [FromBody] ReorderDto dto)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorPlanAsync(CurrentUserId(), planId));
+            if (blocked is not null) return blocked;
             await _service.ReorderChaptersAsync(planId, dto, CurrentUserId());
             return Ok(new { message = "Reordered." });
         }
@@ -162,19 +197,26 @@ public class CurriculumController : ControllerBase
     // ── Topics ────────────────────────────────────────────────────────────────
 
     [HttpPost("topics")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> CreateTopic([FromBody] CreateCourseTopicDto dto)
     {
-        try { return Ok(await _service.CreateTopicAsync(dto, CurrentUserId())); }
+        try
+        {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorChapterAsync(CurrentUserId(), dto.CourseChapterId));
+            if (blocked is not null) return blocked;
+            return Ok(await _service.CreateTopicAsync(dto, CurrentUserId()));
+        }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpPut("topics/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> UpdateTopic(int id, [FromBody] UpdateCourseTopicDto dto)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorTopicAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
             var ok = await _service.UpdateTopicAsync(id, dto, CurrentUserId());
             return ok ? Ok(new { message = "Updated." }) : NotFound();
         }
@@ -182,11 +224,13 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpDelete("topics/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> DeleteTopic(int id)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorTopicAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
             var ok = await _service.SoftDeleteTopicAsync(id, CurrentUserId());
             return ok ? Ok(new { message = "Deleted." }) : NotFound();
         }
@@ -194,11 +238,13 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpPut("chapters/{chapterId:int}/topics/reorder")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> ReorderTopics(int chapterId, [FromBody] ReorderDto dto)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorChapterAsync(CurrentUserId(), chapterId));
+            if (blocked is not null) return blocked;
             await _service.ReorderTopicsAsync(chapterId, dto, CurrentUserId());
             return Ok(new { message = "Reordered." });
         }
@@ -210,7 +256,8 @@ public class CurriculumController : ControllerBase
     public async Task<IActionResult> GetTopic(int id)
     {
         var teacherId = IsTeacherOnly() ? CurrentUserId() : (int?)null;
-        var dto = await _service.GetTopicDetailAsync(id, teacherId, requirePublished: IsTeacherOnly());
+        // Teachers may read draft topics they are assigned to (authoring).
+        var dto = await _service.GetTopicDetailAsync(id, teacherId, requirePublished: false);
         return dto is null ? NotFound() : Ok(dto);
     }
 
@@ -223,26 +270,45 @@ public class CurriculumController : ControllerBase
             await _service.UpdateTopicProgressAsync(id, dto, CurrentUserId());
             return Ok(new { message = "Progress updated." });
         }
-        catch (UnauthorizedAccessException ex) { return Forbid(); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     // ── Materials ─────────────────────────────────────────────────────────────
 
     [HttpPost("materials")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> CreateMaterial([FromBody] CreateCourseMaterialDto dto)
     {
-        try { return Ok(await _service.CreateMaterialAsync(dto, CurrentUserId())); }
+        try
+        {
+            if (IsTeacherOnly())
+            {
+                if (dto.CourseTopicId is int tid)
+                {
+                    var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorTopicAsync(CurrentUserId(), tid));
+                    if (blocked is not null) return blocked;
+                }
+                else if (dto.CourseChapterId is int cid)
+                {
+                    var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorChapterAsync(CurrentUserId(), cid));
+                    if (blocked is not null) return blocked;
+                }
+                else return BadRequest(new { error = "Material must belong to a chapter or topic." });
+            }
+            return Ok(await _service.CreateMaterialAsync(dto, CurrentUserId()));
+        }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpPut("materials/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> UpdateMaterial(int id, [FromBody] UpdateCourseMaterialDto dto)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorMaterialAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
             var ok = await _service.UpdateMaterialAsync(id, dto, CurrentUserId());
             return ok ? Ok(new { message = "Updated." }) : NotFound();
         }
@@ -250,11 +316,13 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpDelete("materials/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> DeleteMaterial(int id)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorMaterialAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
             var ok = await _service.SoftDeleteMaterialAsync(id, CurrentUserId());
             return ok ? Ok(new { message = "Deleted." }) : NotFound();
         }
@@ -264,19 +332,26 @@ public class CurriculumController : ControllerBase
     // ── Topic Activities ──────────────────────────────────────────────────────
 
     [HttpPost("activities")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> CreateActivity([FromBody] CreateCourseTopicActivityDto dto)
     {
-        try { return Ok(await _service.CreateActivityAsync(dto, CurrentUserId())); }
+        try
+        {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorTopicAsync(CurrentUserId(), dto.CourseTopicId));
+            if (blocked is not null) return blocked;
+            return Ok(await _service.CreateActivityAsync(dto, CurrentUserId()));
+        }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpPut("activities/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> UpdateActivity(int id, [FromBody] UpdateCourseTopicActivityDto dto)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorActivityAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
             var ok = await _service.UpdateActivityAsync(id, dto, CurrentUserId());
             return ok ? Ok(new { message = "Updated." }) : NotFound();
         }
@@ -284,11 +359,13 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpDelete("activities/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> DeleteActivity(int id)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorActivityAsync(CurrentUserId(), id));
+            if (blocked is not null) return blocked;
             var ok = await _service.SoftDeleteActivityAsync(id, CurrentUserId());
             return ok ? Ok(new { message = "Deleted." }) : NotFound();
         }
@@ -296,11 +373,13 @@ public class CurriculumController : ControllerBase
     }
 
     [HttpPut("topics/{topicId:int}/activities/reorder")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> ReorderActivities(int topicId, [FromBody] ReorderDto dto)
     {
         try
         {
+            var blocked = await ForbidTeacherUnlessAsync(() => _service.EnsureTeacherCanAuthorTopicAsync(CurrentUserId(), topicId));
+            if (blocked is not null) return blocked;
             await _service.ReorderActivitiesAsync(topicId, dto, CurrentUserId());
             return Ok(new { message = "Reordered." });
         }
@@ -316,11 +395,20 @@ public class CurriculumController : ControllerBase
         return Ok(await _service.GetMyCoursesAsync(CurrentUserId()));
     }
 
+    /// <summary>Teacher ClassSubject slots with optional existing course plan (for Add Course Work).</summary>
+    [HttpGet("my-course-slots")]
+    [Authorize(Roles = "teacher")]
+    public async Task<IActionResult> MyCourseSlots()
+    {
+        return Ok(await _service.GetMyCourseSlotsAsync(CurrentUserId()));
+    }
+
     [HttpGet("workspace/{planId:int}")]
     [Authorize(Roles = "teacher,admin,principal")]
     public async Task<IActionResult> Workspace(int planId)
     {
         var teacherId = IsTeacherOnly() ? CurrentUserId() : (int?)null;
+        // Teaching desk stays on published content; drafts are edited via plan builder.
         var dto = await _service.GetWorkspaceAsync(planId, teacherId, requirePublished: IsTeacherOnly());
         return dto is null ? NotFound() : Ok(dto);
     }

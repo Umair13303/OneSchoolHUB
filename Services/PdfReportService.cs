@@ -1,7 +1,9 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using SchoolManagement.API.DTOs.Exam;
 using SchoolManagement.API.DTOs.Reports;
+using SchoolManagement.API.DTOs.Timetable;
 
 namespace SchoolManagement.API.Services;
 
@@ -13,6 +15,8 @@ public interface IPdfReportService
     byte[] EnrollmentPdf(ClassEnrollmentReportDto data);
     byte[] HomeworkPdf(HomeworkReportDto data);
     byte[] TeacherWorkloadPdf(TeacherWorkloadReportDto data);
+    byte[] ClassTimetablePdf(ClassTimetablePdfModel data);
+    byte[] ExamPaperPdf(ExamPaperPdfModel data);
 }
 
 public class PdfReportService : IPdfReportService
@@ -504,6 +508,302 @@ public class PdfReportService : IPdfReportService
                             table.Cell().Element(c => TableCell(c, alt)).Text(string.Join(", ", row.ClassesTeaching)).FontColor("#6b7280");
                         }
                     });
+                });
+            });
+        }).GeneratePdf();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 7. Class Timetable (landscape — no browser chrome)
+    // ═══════════════════════════════════════════════════════════════════════════
+    public byte[] ClassTimetablePdf(ClassTimetablePdfModel d)
+    {
+        static string DayLabel(int day) => day switch
+        {
+            1 => "MON", 2 => "TUE", 3 => "WED", 4 => "THU",
+            5 => "FRI", 6 => "SAT", 7 => "SUN", _ => day.ToString()
+        };
+
+        var days = d.Days.Count > 0 ? d.Days : new List<int> { 1, 2, 3, 4, 5 };
+
+        return Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4.Landscape());
+                page.Margin(28);
+                page.DefaultTextStyle(t => t.FontFamily("Arial").FontSize(9).FontColor(Grey));
+
+                page.Header().Column(col =>
+                {
+                    col.Item().AlignCenter().Text(d.SchoolName).FontSize(16).Bold().FontColor("#0f172a");
+                    if (!string.IsNullOrWhiteSpace(d.CampusName))
+                        col.Item().AlignCenter().Text(d.CampusName!).FontSize(11).SemiBold().FontColor("#334155");
+                    col.Item().PaddingTop(4).AlignCenter().Text("CLASS TIMETABLE")
+                        .FontSize(10).Bold().FontColor("#475569");
+                    col.Item().AlignCenter().Text(d.ClassLabel).FontSize(11).SemiBold().FontColor("#0f172a");
+                    col.Item().PaddingTop(6).LineHorizontal(1.5f).LineColor("#0f172a");
+                    col.Item().Height(8);
+                });
+
+                page.Footer().PaddingTop(6).BorderTop(1).BorderColor("#94a3b8").PaddingTop(6)
+                    .Row(row =>
+                    {
+                        row.RelativeItem().Text($"Printed by: {d.PrintedBy}").FontSize(8).FontColor("#334155");
+                        row.RelativeItem().AlignRight()
+                            .Text($"Print on: {d.PrintedOn:MMM d, yyyy, h:mm tt}").FontSize(8).FontColor("#334155");
+                    });
+
+                page.Content().Table(table =>
+                {
+                    table.ColumnsDefinition(c =>
+                    {
+                        c.ConstantColumn(28);
+                        c.ConstantColumn(72);
+                        foreach (var _ in days) c.RelativeColumn();
+                    });
+
+                    table.Header(h =>
+                    {
+                        h.Cell().Background("#f1f5f9").Border(1).BorderColor("#94a3b8").Padding(5)
+                            .AlignCenter().Text("#").FontSize(8).Bold().FontColor("#475569");
+                        h.Cell().Background("#f1f5f9").Border(1).BorderColor("#94a3b8").Padding(5)
+                            .Text("TIME").FontSize(8).Bold().FontColor("#475569");
+                        foreach (var day in days)
+                        {
+                            h.Cell().Background("#f1f5f9").Border(1).BorderColor("#94a3b8").Padding(5)
+                                .Text(DayLabel(day)).FontSize(8).Bold().FontColor("#475569");
+                        }
+                    });
+
+                    foreach (var period in d.Periods)
+                    {
+                        var bg = period.IsBreak ? "#fffbeb" : White;
+
+                        table.Cell().Background(bg).Border(1).BorderColor("#94a3b8").Padding(5)
+                            .AlignCenter().AlignMiddle()
+                            .Text(period.IsBreak ? "—" : period.PeriodNo.ToString())
+                            .FontSize(9).Bold();
+
+                        table.Cell().Background(bg).Border(1).BorderColor("#94a3b8").Padding(5)
+                            .AlignMiddle()
+                            .Text($"{period.StartTime}–{period.EndTime}")
+                            .FontSize(8).SemiBold();
+
+                        foreach (var day in days)
+                        {
+                            var cell = period.Cells.TryGetValue(day, out var v) ? v : null;
+                            var containerCell = table.Cell().Background(bg).Border(1).BorderColor("#94a3b8").Padding(4).MinHeight(28);
+
+                            if (period.IsBreak)
+                            {
+                                containerCell.AlignCenter().AlignMiddle()
+                                    .Text("Break").FontSize(9).Bold().FontColor("#92400e");
+                            }
+                            else if (cell is null || string.IsNullOrWhiteSpace(cell.SubjectName))
+                            {
+                                containerCell.Text(string.Empty);
+                            }
+                            else
+                            {
+                                containerCell.Column(inner =>
+                                {
+                                    inner.Item().Text(cell.SubjectName).FontSize(9).Bold().FontColor("#0f172a");
+                                    if (!string.IsNullOrWhiteSpace(cell.TeacherName))
+                                        inner.Item().Text(cell.TeacherName).FontSize(7.5f).FontColor("#475569");
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+        }).GeneratePdf();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 8. Exam Paper (student copy / optional answer key)
+    // ═══════════════════════════════════════════════════════════════════════════
+    public byte[] ExamPaperPdf(ExamPaperPdfModel d)
+    {
+        var ink = "#0f172a";
+        var muted = "#475569";
+        var line = "#94a3b8";
+
+        return Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(36);
+                page.DefaultTextStyle(t => t.FontFamily("Arial").FontSize(10).FontColor(ink));
+
+                page.Header().Column(col =>
+                {
+                    col.Item().AlignCenter().Text(d.SchoolName).FontSize(16).Bold().FontColor(ink);
+                    if (!string.IsNullOrWhiteSpace(d.CampusName))
+                        col.Item().AlignCenter().Text(d.CampusName!).FontSize(10).SemiBold().FontColor(muted);
+                    col.Item().PaddingTop(4).AlignCenter()
+                        .Text(d.IncludeAnswers ? "EXAM PAPER — ANSWER KEY" : "EXAMINATION PAPER")
+                        .FontSize(11).Bold().FontColor(muted);
+                    col.Item().PaddingTop(6).AlignCenter().Text(d.Title).FontSize(13).Bold().FontColor(ink);
+                    col.Item().PaddingTop(8).LineHorizontal(1.5f).LineColor(ink);
+                    col.Item().Height(8);
+
+                    col.Item().Row(row =>
+                    {
+                        row.RelativeItem().Text($"Class: {d.ClassName}").FontSize(9).SemiBold();
+                        row.RelativeItem().AlignCenter().Text($"Subject: {d.SubjectName}").FontSize(9).SemiBold();
+                        row.RelativeItem().AlignRight().Text($"Year: {d.AcademicYear}").FontSize(9).SemiBold();
+                    });
+                    col.Item().PaddingTop(3).Row(row =>
+                    {
+                        row.RelativeItem().Text($"Type: {d.ExamType}").FontSize(9);
+                        row.RelativeItem().AlignCenter().Text($"Total Marks: {d.TotalMarks}").FontSize(9).SemiBold();
+                        row.RelativeItem().AlignRight().Text(
+                            d.DurationMinutes.HasValue
+                                ? $"Time: {d.DurationMinutes} min"
+                                : $"Pass: {d.PassMarks}"
+                        ).FontSize(9);
+                    });
+                    if (d.DurationMinutes.HasValue)
+                        col.Item().PaddingTop(2).Text($"Pass Marks: {d.PassMarks}").FontSize(9);
+
+                    if (!string.IsNullOrWhiteSpace(d.SyllabusNote))
+                        col.Item().PaddingTop(4).Text($"Syllabus: {d.SyllabusNote}").FontSize(8).Italic().FontColor(muted);
+
+                    if (!string.IsNullOrWhiteSpace(d.Instructions))
+                    {
+                        col.Item().PaddingTop(6).Background("#f8fafc").Border(1).BorderColor(line).Padding(8)
+                            .Column(inner =>
+                            {
+                                inner.Item().Text("Instructions").FontSize(9).Bold();
+                                inner.Item().PaddingTop(2).Text(d.Instructions!).FontSize(8).FontColor(muted);
+                            });
+                    }
+
+                    col.Item().PaddingTop(6).Row(row =>
+                    {
+                        row.RelativeItem().Text("Name: _______________________________").FontSize(9);
+                        row.RelativeItem().Text("Roll No: ____________").FontSize(9);
+                        row.RelativeItem().AlignRight().Text("Date: ____________").FontSize(9);
+                    });
+                    col.Item().PaddingTop(8).LineHorizontal(0.75f).LineColor(line);
+                    col.Item().Height(6);
+                });
+
+                page.Footer().PaddingTop(4).BorderTop(1).BorderColor(line).PaddingTop(4)
+                    .Row(row =>
+                    {
+                        row.RelativeItem().Text($"Printed by: {d.PrintedBy}").FontSize(8).FontColor(muted);
+                        row.RelativeItem().AlignCenter().Text(t =>
+                        {
+                            t.Span("Page ").FontSize(8).FontColor(muted);
+                            t.CurrentPageNumber().FontSize(8).FontColor(muted);
+                            t.Span(" of ").FontSize(8).FontColor(muted);
+                            t.TotalPages().FontSize(8).FontColor(muted);
+                        });
+                        row.RelativeItem().AlignRight()
+                            .Text($"Print on: {d.PrintedOn:MMM d, yyyy, h:mm tt}").FontSize(8).FontColor(muted);
+                    });
+
+                page.Content().Column(col =>
+                {
+                    foreach (var section in d.Sections)
+                    {
+                        col.Item().PaddingTop(8).PaddingBottom(4).Row(row =>
+                        {
+                            row.RelativeItem().Text(section.SectionName).FontSize(11).Bold().FontColor(ink);
+                            row.ConstantItem(90).AlignRight()
+                                .Text($"[{section.AllocatedMarks} Marks]").FontSize(9).SemiBold().FontColor(muted);
+                        });
+
+                        if (!string.IsNullOrWhiteSpace(section.SectionNote) || section.AttemptQuestions.HasValue)
+                        {
+                            var note = section.SectionNote ?? "";
+                            if (section.AttemptQuestions.HasValue)
+                                note = string.IsNullOrWhiteSpace(note)
+                                    ? $"Attempt any {section.AttemptQuestions}"
+                                    : $"{note}";
+                            col.Item().PaddingBottom(4).Text(note).FontSize(8).Italic().FontColor(muted);
+                        }
+
+                        if (section.Questions.Count == 0)
+                        {
+                            col.Item().PaddingBottom(6).Text("No questions in this section.")
+                                .FontSize(8).Italic().FontColor("#94a3b8");
+                            continue;
+                        }
+
+                        foreach (var q in section.Questions)
+                        {
+                            col.Item().PaddingBottom(8).Column(qCol =>
+                            {
+                                qCol.Item().Row(row =>
+                                {
+                                    row.RelativeItem().Text($"Q{q.Number}. {q.QuestionText}")
+                                        .FontSize(10).FontColor(ink);
+                                    row.ConstantItem(42).AlignRight()
+                                        .Text($"({q.Marks})").FontSize(9).FontColor(muted);
+                                });
+
+                                if (!string.IsNullOrWhiteSpace(q.QuestionNote))
+                                    qCol.Item().PaddingLeft(18).PaddingTop(2)
+                                        .Text(q.QuestionNote!).FontSize(8).Italic().FontColor(muted);
+
+                                if (q.QuestionTypeId == 1) // MultipleChoice
+                                {
+                                    foreach (var opt in q.Options)
+                                    {
+                                        var mark = d.IncludeAnswers && opt.IsCorrect ? " *" : "";
+                                        qCol.Item().PaddingLeft(18).PaddingTop(2)
+                                            .Text($"({opt.Label})  {opt.Text}{mark}")
+                                            .FontSize(9)
+                                            .FontColor(d.IncludeAnswers && opt.IsCorrect ? Green : ink);
+                                    }
+                                }
+                                else if (q.QuestionTypeId == 2) // TrueFalse
+                                {
+                                    var ans = d.IncludeAnswers && q.IsTrue.HasValue
+                                        ? (q.IsTrue.Value ? "  [Answer: True]" : "  [Answer: False]")
+                                        : "";
+                                    qCol.Item().PaddingLeft(18).PaddingTop(2)
+                                        .Text($"[ ] True     [ ] False{ans}").FontSize(9);
+                                }
+                                else if (q.QuestionTypeId == 3) // FillInBlanks
+                                {
+                                    if (d.IncludeAnswers && !string.IsNullOrWhiteSpace(q.CorrectAnswer))
+                                        qCol.Item().PaddingLeft(18).PaddingTop(2)
+                                            .Text($"Answer: {q.CorrectAnswer}").FontSize(9).FontColor(Green);
+                                    else
+                                        qCol.Item().PaddingLeft(18).PaddingTop(2)
+                                            .Text("______________________________").FontSize(9).FontColor(muted);
+                                }
+                                else
+                                {
+                                    // Short / Long — ruled answer lines with handwriting height (~24pt)
+                                    if (d.IncludeAnswers && !string.IsNullOrWhiteSpace(q.CorrectAnswer))
+                                    {
+                                        qCol.Item().PaddingLeft(18).PaddingTop(2)
+                                            .Text($"Model answer: {q.CorrectAnswer}")
+                                            .FontSize(8).Italic().FontColor(Green);
+                                    }
+                                    else
+                                    {
+                                        var lines = q.QuestionTypeId == 5 ? 5 : 3;
+                                        const float lineHeight = 24f;
+                                        qCol.Item().PaddingLeft(18).PaddingTop(4).Column(linesCol =>
+                                        {
+                                            for (var i = 0; i < lines; i++)
+                                            {
+                                                linesCol.Item().Height(lineHeight).AlignBottom()
+                                                    .LineHorizontal(0.6f).LineColor(line);
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+                        }
+                    }
                 });
             });
         }).GeneratePdf();

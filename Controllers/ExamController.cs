@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SchoolManagement.API.Data;
 using SchoolManagement.API.DTOs.Assessment;
 using SchoolManagement.API.DTOs.Exam;
 using SchoolManagement.API.Models;
@@ -18,6 +20,7 @@ namespace SchoolManagement.API.Controllers;
 ///   PUT    /api/exam/papers/{id}                         → update paper
 ///   DELETE /api/exam/papers/{id}                         → soft delete
 ///   POST   /api/exam/papers/{id}/publish                 → publish draft
+///   GET    /api/exam/papers/{id}/pdf                     → printable exam paper PDF
 ///
 /// SCHEDULE endpoints:
 ///   POST   /api/exam/schedules                           → create schedule
@@ -34,9 +37,9 @@ namespace SchoolManagement.API.Controllers;
 ///   GET    /api/exam/results/student/{studentId}/card    → student result card
 ///
 /// Access:
-///   Create / edit paper, enter results → teacher, admin, superadmin, principal
-///   View papers / results              → all roles except staff
-///   Publish / delete                   → admin, superadmin, principal
+///   Create / edit / delete / publish paper, enter results → teacher, admin, principal
+///   Teachers are scoped to assigned ClassSubject pairs (same pattern as Curriculum).
+///   View papers / results                                 → all roles except staff
 /// </summary>
 [ApiController]
 [Route("api/exam")]
@@ -45,7 +48,45 @@ namespace SchoolManagement.API.Controllers;
 public class ExamController : ControllerBase
 {
     private readonly IExamService _service;
-    public ExamController(IExamService service) => _service = service;
+    private readonly IPdfReportService _pdf;
+    private readonly AppDbContext _db;
+
+    public ExamController(IExamService service, IPdfReportService pdf, AppDbContext db)
+    {
+        _service = service;
+        _pdf = pdf;
+        _db = db;
+    }
+
+    private int CurrentUserId() =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? throw new UnauthorizedAccessException("User ID not found in token."));
+
+    /// <summary>
+    /// True only when the caller has teacher and none of admin/principal/superadmin.
+    /// Matches CurriculumController / ClassroomAssessmentController.
+    /// </summary>
+    private bool IsTeacherOnly()
+    {
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return roles.Contains("teacher")
+            && !roles.Contains("admin")
+            && !roles.Contains("principal")
+            && !roles.Contains("superadmin");
+    }
+
+    /// <summary>Runs Ensure* for teacher-only callers; admin/principal/superadmin bypass.</summary>
+    private async Task<IActionResult?> ForbidTeacherUnlessAsync(Func<Task> ensure)
+    {
+        if (!IsTeacherOnly()) return null;
+        try
+        {
+            await ensure();
+            return null;
+        }
+        catch (UnauthorizedAccessException) { return Forbid(); }
+        catch (ArgumentException ex) { return NotFound(new { error = ex.Message }); }
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PAPERS
@@ -63,6 +104,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> CreatePaper([FromBody] CreateExamPaperDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessClassSubjectAsync(CurrentUserId(), dto.ClassId, dto.SubjectId));
+        if (denied != null) return denied;
+
         try
         {
             var result = await _service.CreatePaperAsync(dto, CurrentUserId());
@@ -73,6 +118,7 @@ public class ExamController : ControllerBase
 
     /// <summary>
     /// List exam papers with optional filters.
+    /// Teachers only see papers for their assigned ClassSubject pairs.
     /// </summary>
     [HttpGet("papers")]
     [Authorize(Roles = "superadmin,admin,principal,teacher,parent")]
@@ -82,7 +128,8 @@ public class ExamController : ControllerBase
         [FromQuery] int?      academicYearId = null,
         [FromQuery] ExamType? examType       = null)
     {
-        var list = await _service.GetPapersAsync(classId, subjectId, academicYearId, examType);
+        int? teacherId = IsTeacherOnly() ? CurrentUserId() : null;
+        var list = await _service.GetPapersAsync(classId, subjectId, academicYearId, examType, teacherId);
         return Ok(list);
     }
 
@@ -91,6 +138,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "superadmin,admin,principal,teacher,parent")]
     public async Task<IActionResult> GetPaper(int id)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
         var paper = await _service.GetPaperByIdAsync(id);
         return paper is null ? NotFound() : Ok(paper);
     }
@@ -100,6 +151,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> UpdatePaper(int id, [FromBody] UpdateExamPaperDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
         try
         {
             var ok = await _service.UpdatePaperAsync(id, dto, CurrentUserId());
@@ -111,9 +166,13 @@ public class ExamController : ControllerBase
 
     /// <summary>Soft-delete a paper (only if no results have been entered).</summary>
     [HttpDelete("papers/{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> DeletePaper(int id)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
         try
         {
             var ok = await _service.DeletePaperAsync(id, CurrentUserId());
@@ -124,15 +183,156 @@ public class ExamController : ControllerBase
 
     /// <summary>Publish a draft paper so teachers can enter results.</summary>
     [HttpPost("papers/{id:int}/publish")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> PublishPaper(int id)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
         try
         {
             var result = await _service.PublishPaperAsync(id, CurrentUserId());
             return Ok(result);
         }
         catch (ArgumentException ex) { return NotFound(new { error = ex.Message }); }
+    }
+
+    /// <summary>
+    /// Download printable exam paper PDF (student copy).
+    /// Pass answerKey=true for teacher answer key.
+    /// </summary>
+    [HttpGet("papers/{id:int}/pdf")]
+    [Authorize(Roles = "superadmin,admin,principal,teacher")]
+    [Produces("application/pdf")]
+    public async Task<IActionResult> DownloadPaperPdf(int id, [FromQuery] bool answerKey = false)
+    {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
+        var paper = await _service.GetPaperByIdAsync(id);
+        if (paper is null) return NotFound(new { error = "Paper not found." });
+
+        var questions = await _service.GetQuestionsAsync(id);
+        var userId = CurrentUserId();
+
+        var printedBy = await _db.Users.AsNoTracking()
+            .Where(u => u.UserId == userId)
+            .Select(u => u.FullName)
+            .FirstOrDefaultAsync() ?? "User";
+
+        string schoolName = "School";
+        string? campusName = null;
+        var paperRow = await _db.ExamPapers.AsNoTracking()
+            .Where(p => p.ExamPaperId == id)
+            .Select(p => new { p.InstituteId, p.CampusId })
+            .FirstOrDefaultAsync();
+        if (paperRow?.InstituteId is int instId)
+        {
+            schoolName = await _db.Institutes.AsNoTracking()
+                .Where(i => i.InstituteId == instId)
+                .Select(i => i.Name)
+                .FirstOrDefaultAsync() ?? schoolName;
+        }
+        if (paperRow?.CampusId is int campId)
+        {
+            campusName = await _db.Campuses.AsNoTracking()
+                .Where(c => c.CampusId == campId)
+                .Select(c => c.Name)
+                .FirstOrDefaultAsync();
+        }
+
+        var model = new ExamPaperPdfModel
+        {
+            SchoolName = schoolName,
+            CampusName = string.IsNullOrWhiteSpace(campusName) ? null : campusName,
+            Title = paper.Title,
+            ExamType = paper.ExamType,
+            ClassName = paper.ClassName,
+            SubjectName = paper.SubjectName,
+            AcademicYear = paper.AcademicYearName,
+            TotalMarks = paper.TotalMarks,
+            PassMarks = paper.PassMarks,
+            DurationMinutes = paper.DurationMinutes,
+            Instructions = paper.Instructions,
+            SyllabusNote = paper.SyllabusNote,
+            IncludeAnswers = answerKey,
+            PrintedBy = printedBy,
+            PrintedOn = DateTime.Now,
+            Sections = paper.Sections
+                .OrderBy(s => s.SortOrder)
+                .Select(s =>
+                {
+                    var secQs = questions
+                        .Where(q => q.ExamPaperSectionId == s.ExamPaperSectionId)
+                        .OrderBy(q => q.SortOrder)
+                        .ToList();
+                    var n = 0;
+                    return new ExamPaperPdfSection
+                    {
+                        SectionName = s.SectionName,
+                        SectionType = s.SectionType,
+                        AllocatedMarks = s.AllocatedMarks,
+                        SectionNote = s.SectionNote,
+                        AttemptQuestions = s.AttemptQuestions,
+                        Questions = secQs.Select(q => new ExamPaperPdfQuestion
+                        {
+                            Number = ++n,
+                            QuestionTypeId = q.QuestionTypeId,
+                            QuestionText = q.QuestionText,
+                            Marks = q.Marks,
+                            QuestionNote = q.QuestionNote,
+                            CorrectAnswer = q.CorrectAnswer,
+                            IsTrue = q.IsTrue,
+                            Options = q.Options
+                                .OrderBy(o => o.SortOrder)
+                                .Select(o => new ExamPaperPdfOption
+                                {
+                                    Label = o.OptionLabel,
+                                    Text = o.OptionText,
+                                    IsCorrect = o.IsCorrect
+                                }).ToList()
+                        }).ToList()
+                    };
+                }).ToList()
+        };
+
+        // Also include unsectioned questions under a final bucket if any
+        var orphanQs = questions.Where(q => q.ExamPaperSectionId == null ||
+            !paper.Sections.Any(s => s.ExamPaperSectionId == q.ExamPaperSectionId)).ToList();
+        if (orphanQs.Count > 0)
+        {
+            var n = 0;
+            model.Sections.Add(new ExamPaperPdfSection
+            {
+                SectionName = "Questions",
+                SectionType = "ShortAnswer",
+                AllocatedMarks = orphanQs.Sum(q => q.Marks),
+                Questions = orphanQs.OrderBy(q => q.SortOrder).Select(q => new ExamPaperPdfQuestion
+                {
+                    Number = ++n,
+                    QuestionTypeId = q.QuestionTypeId,
+                    QuestionText = q.QuestionText,
+                    Marks = q.Marks,
+                    QuestionNote = q.QuestionNote,
+                    CorrectAnswer = q.CorrectAnswer,
+                    IsTrue = q.IsTrue,
+                    Options = q.Options.OrderBy(o => o.SortOrder).Select(o => new ExamPaperPdfOption
+                    {
+                        Label = o.OptionLabel,
+                        Text = o.OptionText,
+                        IsCorrect = o.IsCorrect
+                    }).ToList()
+                }).ToList()
+            });
+        }
+
+        var bytes = _pdf.ExamPaperPdf(model);
+        var safe = string.Concat(paper.Title.Split(Path.GetInvalidFileNameChars()));
+        if (string.IsNullOrWhiteSpace(safe)) safe = $"Paper-{id}";
+        var suffix = answerKey ? "-AnswerKey" : "";
+        return File(bytes, "application/pdf", $"{safe}{suffix}.pdf");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -160,7 +360,8 @@ public class ExamController : ControllerBase
         [FromQuery] DateOnly? fromDate = null,
         [FromQuery] DateOnly? toDate   = null)
     {
-        var list = await _service.GetSchedulesAsync(classId, fromDate, toDate);
+        int? teacherId = IsTeacherOnly() ? CurrentUserId() : null;
+        var list = await _service.GetSchedulesAsync(classId, fromDate, toDate, teacherId);
         return Ok(list);
     }
 
@@ -194,6 +395,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> EnterResult([FromBody] EnterExamResultDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), dto.ExamPaperId));
+        if (denied != null) return denied;
+
         try
         {
             var result = await _service.EnterResultAsync(dto, CurrentUserId());
@@ -210,6 +415,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> BulkEnterResults([FromBody] BulkEnterExamResultDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), dto.ExamPaperId));
+        if (denied != null) return denied;
+
         try
         {
             await _service.BulkEnterResultsAsync(dto, CurrentUserId());
@@ -223,6 +432,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> RecalculateRanks(int paperId)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), paperId));
+        if (denied != null) return denied;
+
         await _service.RecalculateRanksAsync(paperId);
         return Ok(new { message = "Ranks recalculated." });
     }
@@ -235,6 +448,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "superadmin,admin,principal,teacher")]
     public async Task<IActionResult> GetClassResultSummary(int paperId)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), paperId));
+        if (denied != null) return denied;
+
         try
         {
             var summary = await _service.GetClassResultSummaryAsync(paperId);
@@ -248,7 +465,8 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "superadmin,admin,principal,teacher,parent")]
     public async Task<IActionResult> GetStudentResults(int studentId, [FromQuery] int? academicYearId = null)
     {
-        var results = await _service.GetStudentResultsAsync(studentId, academicYearId);
+        int? teacherId = IsTeacherOnly() ? CurrentUserId() : null;
+        var results = await _service.GetStudentResultsAsync(studentId, academicYearId, teacherId);
         return Ok(results);
     }
 
@@ -266,7 +484,8 @@ public class ExamController : ControllerBase
         if (academicYearId == 0) return BadRequest(new { error = "academicYearId is required." });
         try
         {
-            var card = await _service.GetStudentResultCardAsync(studentId, academicYearId, examType);
+            int? teacherId = IsTeacherOnly() ? CurrentUserId() : null;
+            var card = await _service.GetStudentResultCardAsync(studentId, academicYearId, examType, teacherId);
             return Ok(card);
         }
         catch (ArgumentException ex) { return NotFound(new { error = ex.Message }); }
@@ -286,6 +505,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "superadmin,admin,principal,teacher")]
     public async Task<IActionResult> GetQuestions(int paperId)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), paperId));
+        if (denied != null) return denied;
+
         var list = await _service.GetQuestionsAsync(paperId);
         return Ok(list);
     }
@@ -294,6 +517,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> AddQuestion([FromBody] CreateExamQuestionDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), dto.ExamPaperId));
+        if (denied != null) return denied;
+
         try
         {
             var result = await _service.AddQuestionAsync(dto, CurrentUserId());
@@ -306,6 +533,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> UpdateQuestion(int id, [FromBody] UpdateExamQuestionDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessQuestionAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
         try
         {
             var ok = await _service.UpdateQuestionAsync(id, dto, CurrentUserId());
@@ -318,6 +549,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> DeleteQuestion(int id)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessQuestionAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
         var ok = await _service.DeleteQuestionAsync(id, CurrentUserId());
         return ok ? NoContent() : NotFound();
     }
@@ -327,6 +562,10 @@ public class ExamController : ControllerBase
     public async Task<IActionResult> SaveAllQuestions(int paperId, [FromBody] SavePaperQuestionsDto dto)
     {
         dto.ExamPaperId = paperId;
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), paperId));
+        if (denied != null) return denied;
+
         try
         {
             var list = await _service.SavePaperQuestionsAsync(dto, CurrentUserId());
@@ -339,6 +578,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> GetSyllabus(int paperId)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), paperId));
+        if (denied != null) return denied;
+
         try { return Ok(await _service.GetSyllabusAsync(paperId)); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
@@ -347,6 +590,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> SaveSyllabus(int paperId, [FromBody] SaveExamSyllabusDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), paperId));
+        if (denied != null) return denied;
+
         try { return Ok(await _service.SaveSyllabusAsync(paperId, dto, CurrentUserId())); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
@@ -354,12 +601,26 @@ public class ExamController : ControllerBase
     [HttpGet("question-bank")]
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> ListQuestionBank([FromQuery] int? topicId, [FromQuery] string? search, [FromQuery] bool? activeOnly)
-        => Ok(await _service.ListQuestionBankAsync(topicId, search, activeOnly));
+    {
+        if (IsTeacherOnly() && topicId is > 0)
+        {
+            var denied = await ForbidTeacherUnlessAsync(() =>
+                _service.EnsureTeacherCanAccessTopicAsync(CurrentUserId(), topicId.Value));
+            if (denied != null) return denied;
+        }
+
+        int? teacherId = IsTeacherOnly() ? CurrentUserId() : null;
+        return Ok(await _service.ListQuestionBankAsync(topicId, search, activeOnly, teacherId));
+    }
 
     [HttpPost("question-bank")]
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> CreateQuestionBank([FromBody] CreateQuestionBankItemDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessTopicAsync(CurrentUserId(), dto.CourseTopicId));
+        if (denied != null) return denied;
+
         try { return Ok(await _service.CreateQuestionBankItemAsync(dto, CurrentUserId())); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
@@ -368,6 +629,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> UpdateQuestionBank(int id, [FromBody] UpdateQuestionBankItemDto dto)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessQuestionBankItemAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
         try
         {
             var ok = await _service.UpdateQuestionBankItemAsync(id, dto, CurrentUserId());
@@ -380,6 +645,10 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> DeleteQuestionBank(int id)
     {
+        var denied = await ForbidTeacherUnlessAsync(() =>
+            _service.EnsureTeacherCanAccessQuestionBankItemAsync(CurrentUserId(), id));
+        if (denied != null) return denied;
+
         var ok = await _service.DeleteQuestionBankItemAsync(id, CurrentUserId());
         return ok ? Ok(new { message = "Deleted." }) : NotFound();
     }
@@ -388,12 +657,21 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "admin,principal,teacher")]
     public async Task<IActionResult> CopyBankToPaper([FromBody] CopyQuestionBankToPaperDto dto)
     {
+        if (IsTeacherOnly())
+        {
+            var denied = await ForbidTeacherUnlessAsync(() =>
+                _service.EnsureTeacherCanAccessPaperAsync(CurrentUserId(), dto.ExamPaperId));
+            if (denied != null) return denied;
+
+            foreach (var itemId in dto.QuestionBankItemIds.Distinct())
+            {
+                denied = await ForbidTeacherUnlessAsync(() =>
+                    _service.EnsureTeacherCanAccessQuestionBankItemAsync(CurrentUserId(), itemId));
+                if (denied != null) return denied;
+            }
+        }
+
         try { return Ok(await _service.CopyQuestionBankToPaperAsync(dto, CurrentUserId())); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-    private int CurrentUserId() =>
-        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? throw new UnauthorizedAccessException("User ID not found in token."));
 }

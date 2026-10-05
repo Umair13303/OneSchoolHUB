@@ -10,6 +10,8 @@ public class ClassDto
 
     public int?    InstituteId    { get; set; }
     public string? InstituteName  { get; set; }
+    public int?    CampusId       { get; set; }
+    public string? CampusName     { get; set; }
 
     public int    SubjectCount    { get; set; }
     public List<ClassSubjectDto> Subjects { get; set; } = new();

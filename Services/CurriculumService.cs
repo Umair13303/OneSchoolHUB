@@ -35,6 +35,13 @@ public interface ICurriculumService
     Task<bool> ReorderActivitiesAsync(int topicId, ReorderDto dto, int userId);
 
     Task<List<CoursePlanListDto>> GetMyCoursesAsync(int teacherId);
+    Task<List<TeacherCourseSlotDto>> GetMyCourseSlotsAsync(int teacherId);
+    Task EnsureTeacherCanAuthorClassSubjectAsync(int teacherId, int classId, int subjectId);
+    Task EnsureTeacherCanAuthorPlanAsync(int teacherId, int planId);
+    Task EnsureTeacherCanAuthorChapterAsync(int teacherId, int chapterId);
+    Task EnsureTeacherCanAuthorTopicAsync(int teacherId, int topicId);
+    Task EnsureTeacherCanAuthorMaterialAsync(int teacherId, int materialId);
+    Task EnsureTeacherCanAuthorActivityAsync(int teacherId, int activityId);
     Task<CoursePlanDetailDto?> GetWorkspaceAsync(int planId, int? teacherId, bool requirePublished);
     Task<CourseTopicDto?> GetTopicDetailAsync(int topicId, int? teacherId, bool requirePublished);
     Task<bool> UpdateTopicProgressAsync(int topicId, UpdateTopicProgressDto dto, int teacherId);
@@ -582,7 +589,8 @@ public class CurriculumService : ICurriculumService
             .Include(p => p.Chapters.Where(c => !c.IsDeleted))
                 .ThenInclude(c => c.Topics.Where(t => !t.IsDeleted))
                     .ThenInclude(t => t.Progress)
-            .Where(p => !p.IsDeleted && p.Status == "Published"
+            .Where(p => !p.IsDeleted
+                        && p.Status != "Archived"
                         && classIds.Contains(p.ClassId)
                         && subjectIds.Contains(p.SubjectId))
             .ToListAsync();
@@ -593,6 +601,135 @@ public class CurriculumService : ICurriculumService
             .Select(MapPlanList)
             .OrderBy(p => p.ClassName).ThenBy(p => p.SubjectName)
             .ToList();
+    }
+
+    public async Task<List<TeacherCourseSlotDto>> GetMyCourseSlotsAsync(int teacherId)
+    {
+        var assignments = await _db.ClassSubjects.AsNoTracking()
+            .Include(cs => cs.Class)
+            .Include(cs => cs.Subject)
+            .Where(cs => cs.TeacherId == teacherId && cs.IsActive)
+            .ToListAsync();
+
+        if (assignments.Count == 0) return new();
+
+        var classIds = assignments.Select(a => a.ClassId).Distinct().ToList();
+        var subjectIds = assignments.Select(a => a.SubjectId).Distinct().ToList();
+
+        var classYears = await _db.Classes.AsNoTracking()
+            .Where(c => classIds.Contains(c.ClassId))
+            .Select(c => new
+            {
+                c.ClassId,
+                AcademicYearId = EF.Property<int?>(c, "AcademicYearId")
+            })
+            .ToListAsync();
+
+        var yearIds = classYears.Where(c => c.AcademicYearId.HasValue)
+            .Select(c => c.AcademicYearId!.Value).Distinct().ToList();
+
+        // Fall back to active year(s) when class has no year link
+        if (yearIds.Count == 0)
+        {
+            yearIds = await _db.AcademicYears.AsNoTracking()
+                .Where(y => y.IsActive && !y.IsDeleted)
+                .Select(y => y.AcademicYearId)
+                .ToListAsync();
+        }
+
+        var years = await _db.AcademicYears.AsNoTracking()
+            .Where(y => yearIds.Contains(y.AcademicYearId) || (y.IsActive && !y.IsDeleted))
+            .Select(y => new { y.AcademicYearId, y.YearLabel, y.IsActive })
+            .ToListAsync();
+
+        var plans = await _db.CoursePlans.AsNoTracking()
+            .Where(p => !p.IsDeleted && p.Status != "Archived"
+                        && classIds.Contains(p.ClassId)
+                        && subjectIds.Contains(p.SubjectId))
+            .Select(p => new { p.CoursePlanId, p.ClassId, p.SubjectId, p.AcademicYearId, p.Status, p.Title })
+            .ToListAsync();
+
+        var fallbackYear = years.FirstOrDefault(y => y.IsActive) ?? years.FirstOrDefault();
+
+        return assignments
+            .Select(cs =>
+            {
+                var cy = classYears.FirstOrDefault(c => c.ClassId == cs.ClassId);
+                var yearId = cy?.AcademicYearId ?? fallbackYear?.AcademicYearId ?? 0;
+                var year = years.FirstOrDefault(y => y.AcademicYearId == yearId) ?? fallbackYear;
+                var plan = yearId == 0
+                    ? null
+                    : plans.FirstOrDefault(p =>
+                        p.ClassId == cs.ClassId &&
+                        p.SubjectId == cs.SubjectId &&
+                        p.AcademicYearId == yearId);
+                return new TeacherCourseSlotDto
+                {
+                    ClassId = cs.ClassId,
+                    ClassName = cs.Class.ClassName,
+                    Section = cs.Class.Section,
+                    SubjectId = cs.SubjectId,
+                    SubjectName = cs.Subject.SubjectName,
+                    AcademicYearId = yearId,
+                    YearLabel = year?.YearLabel ?? "",
+                    CoursePlanId = plan?.CoursePlanId,
+                    PlanStatus = plan?.Status,
+                    PlanTitle = plan?.Title
+                };
+            })
+            .OrderBy(s => s.ClassName).ThenBy(s => s.SubjectName)
+            .ToList();
+    }
+
+    public async Task EnsureTeacherCanAuthorClassSubjectAsync(int teacherId, int classId, int subjectId)
+    {
+        if (!await IsTeacherAssignedAsync(teacherId, classId, subjectId))
+            throw new UnauthorizedAccessException("You can only create course work for classes/subjects assigned to you.");
+    }
+
+    public async Task EnsureTeacherCanAuthorPlanAsync(int teacherId, int planId)
+    {
+        var plan = await _db.CoursePlans.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.CoursePlanId == planId && !p.IsDeleted)
+            ?? throw new ArgumentException("Course plan not found.");
+        await EnsureTeacherCanAuthorClassSubjectAsync(teacherId, plan.ClassId, plan.SubjectId);
+    }
+
+    public async Task EnsureTeacherCanAuthorChapterAsync(int teacherId, int chapterId)
+    {
+        var chapter = await _db.CourseChapters.AsNoTracking()
+            .Include(c => c.CoursePlan)
+            .FirstOrDefaultAsync(c => c.CourseChapterId == chapterId && !c.IsDeleted)
+            ?? throw new ArgumentException("Chapter not found.");
+        await EnsureTeacherCanAuthorClassSubjectAsync(teacherId, chapter.CoursePlan.ClassId, chapter.CoursePlan.SubjectId);
+    }
+
+    public async Task EnsureTeacherCanAuthorTopicAsync(int teacherId, int topicId)
+    {
+        var topic = await _db.CourseTopics.AsNoTracking()
+            .Include(t => t.CourseChapter).ThenInclude(c => c.CoursePlan)
+            .FirstOrDefaultAsync(t => t.CourseTopicId == topicId && !t.IsDeleted)
+            ?? throw new ArgumentException("Topic not found.");
+        var plan = topic.CourseChapter.CoursePlan;
+        await EnsureTeacherCanAuthorClassSubjectAsync(teacherId, plan.ClassId, plan.SubjectId);
+    }
+
+    public async Task EnsureTeacherCanAuthorMaterialAsync(int teacherId, int materialId)
+    {
+        var material = await LoadMaterialWithPlanAsync(materialId)
+            ?? throw new ArgumentException("Material not found.");
+        var plan = GetPlanFromMaterial(material);
+        await EnsureTeacherCanAuthorClassSubjectAsync(teacherId, plan.ClassId, plan.SubjectId);
+    }
+
+    public async Task EnsureTeacherCanAuthorActivityAsync(int teacherId, int activityId)
+    {
+        var activity = await _db.CourseTopicActivities.AsNoTracking()
+            .Include(a => a.CourseTopic).ThenInclude(t => t.CourseChapter).ThenInclude(c => c.CoursePlan)
+            .FirstOrDefaultAsync(a => a.CourseTopicActivityId == activityId && !a.IsDeleted)
+            ?? throw new ArgumentException("Activity not found.");
+        var plan = activity.CourseTopic.CourseChapter.CoursePlan;
+        await EnsureTeacherCanAuthorClassSubjectAsync(teacherId, plan.ClassId, plan.SubjectId);
     }
 
     public async Task<CoursePlanDetailDto?> GetWorkspaceAsync(int planId, int? teacherId, bool requirePublished)

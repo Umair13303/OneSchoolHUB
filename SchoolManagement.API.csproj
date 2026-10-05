@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>SchoolManagement.API</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);SchoolManagement.API.Tests\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

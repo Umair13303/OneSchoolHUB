@@ -37,7 +37,8 @@ public class ClassService : IClassService
             .ToListAsync();
 
         var instituteNames = await GetInstituteNamesAsync(classes.Select(c => c.InstituteId));
-        return classes.Select(c => MapToDto(c, instituteNames)).ToList();
+        var campusNames    = await GetCampusNamesAsync(classes.Select(c => c.CampusId));
+        return classes.Select(c => MapToDto(c, instituteNames, campusNames)).ToList();
     }
 
     public async Task<ClassDto?> GetByIdAsync(int id)
@@ -51,7 +52,8 @@ public class ClassService : IClassService
         if (entity is null) return null;
 
         var instituteNames = await GetInstituteNamesAsync(new[] { entity.InstituteId });
-        return MapToDto(entity, instituteNames);
+        var campusNames    = await GetCampusNamesAsync(new[] { entity.CampusId });
+        return MapToDto(entity, instituteNames, campusNames);
     }
 
     public async Task<ClassDto> CreateAsync(CreateClassDto dto, int createdBy)
@@ -318,7 +320,20 @@ public class ClassService : IClassService
             .ToDictionaryAsync(i => i.InstituteId, i => i.Name);
     }
 
-    private static ClassDto MapToDto(Class c, Dictionary<int, string> instituteNames) => new()
+    private async Task<Dictionary<int, string>> GetCampusNamesAsync(IEnumerable<int?> campusIds)
+    {
+        var ids = campusIds.Where(i => i.HasValue).Select(i => i!.Value).Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<int, string>();
+        return await _db.Campuses
+            .AsNoTracking()
+            .Where(c => ids.Contains(c.CampusId))
+            .ToDictionaryAsync(c => c.CampusId, c => c.Name);
+    }
+
+    private static ClassDto MapToDto(
+        Class c,
+        Dictionary<int, string> instituteNames,
+        Dictionary<int, string> campusNames) => new()
     {
         ClassId       = c.ClassId,
         ClassName     = c.ClassName,
@@ -326,6 +341,8 @@ public class ClassService : IClassService
         IsActive      = c.IsActive,
         InstituteId   = c.InstituteId,
         InstituteName = c.InstituteId.HasValue && instituteNames.TryGetValue(c.InstituteId.Value, out var n) ? n : null,
+        CampusId      = c.CampusId,
+        CampusName    = c.CampusId.HasValue && campusNames.TryGetValue(c.CampusId.Value, out var cn) ? cn : null,
         SubjectCount      = c.ClassSubjects.Count,
         Subjects          = c.ClassSubjects.Select(cs => new ClassSubjectDto
         {
