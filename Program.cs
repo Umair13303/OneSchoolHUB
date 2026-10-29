@@ -93,6 +93,7 @@ builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<ISubjectService, SubjectService>();
 builder.Services.AddScoped<IClassService, ClassService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IParentAccessService, ParentAccessService>();
 builder.Services.AddScoped<IPeriodService, PeriodService>();
 builder.Services.AddScoped<ITimetableService, TimetableService>();
@@ -108,6 +109,20 @@ builder.Services.AddHostedService<ActivityLogCleanupService>();
 builder.Services.AddScoped<IFeeService, FeeService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IExamService, ExamService>();
+builder.Services.Configure<SchoolManagement.API.Services.Ai.AiGenerationOptions>(
+    builder.Configuration.GetSection(SchoolManagement.API.Services.Ai.AiGenerationOptions.SectionName));
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient("AiProvider");
+builder.Services.AddScoped<SchoolManagement.API.Services.Ai.OpenAiCompatibleProvider>();
+builder.Services.AddScoped<SchoolManagement.API.Services.Ai.FakeAiProvider>();
+builder.Services.AddScoped<SchoolManagement.API.Services.Ai.IAiProvider>(sp =>
+{
+    var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SchoolManagement.API.Services.Ai.AiGenerationOptions>>().Value;
+    if (string.Equals(opts.Provider, "Fake", StringComparison.OrdinalIgnoreCase))
+        return sp.GetRequiredService<SchoolManagement.API.Services.Ai.FakeAiProvider>();
+    return sp.GetRequiredService<SchoolManagement.API.Services.Ai.OpenAiCompatibleProvider>();
+});
+builder.Services.AddScoped<SchoolManagement.API.Services.Ai.IAiContentService, SchoolManagement.API.Services.Ai.AiContentService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IDayScheduleService, DayScheduleService>();
 builder.Services.AddScoped<IScheduleProfileService, ScheduleProfileService>();
