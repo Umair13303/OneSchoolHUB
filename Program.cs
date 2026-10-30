@@ -304,6 +304,149 @@ SET IDENTITY_INSERT MenuRolePermissions ON;
 IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE Id = 214)
 INSERT INTO MenuRolePermissions (Id, MenuItemId, RoleId) VALUES (214, 59, 4);
 SET IDENTITY_INSERT MenuRolePermissions OFF;");
+
+    // One-time: orphan (NULL InstituteId) school rows became invisible after admin/teacher
+    // login healed Users.InstituteId. Stamp those rows onto the active school tenant.
+    // Does NOT delete anything. Skips shared rows (MenuItems, system lookups, superadmin).
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+IF NOT EXISTS (
+    SELECT 1 FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'Manual_BackfillNullTenant_20261031')
+BEGIN
+    DECLARE @Target INT = NULL;
+    DECLARE @Campus INT = NULL;
+    DECLARE @SuperAdminRole INT = (
+        SELECT TOP 1 RoleId FROM Roles WHERE RoleName = N'superadmin');
+
+    SELECT TOP 1 @Target = u.InstituteId
+    FROM Users u
+    INNER JOIN Roles r ON r.RoleId = u.RoleId
+    WHERE u.IsDeleted = 0
+      AND u.InstituteId IS NOT NULL
+      AND r.RoleName IN (N'admin', N'teacher', N'principal')
+    ORDER BY
+      CASE WHEN LOWER(u.Email) LIKE N'%@happyday.%' THEN 0 ELSE 1 END,
+      u.UpdatedAt DESC;
+
+    IF @Target IS NULL
+        SELECT TOP 1 @Target = InstituteId
+        FROM Institutes
+        WHERE IsDeleted = 0 AND IsActive = 1
+          AND REPLACE(LOWER(Name), N' ', N'') LIKE N'%happyday%'
+        ORDER BY InstituteId;
+
+    IF @Target IS NULL AND (SELECT COUNT(*) FROM Institutes WHERE IsDeleted = 0 AND IsActive = 1) = 1
+        SELECT TOP 1 @Target = InstituteId FROM Institutes WHERE IsDeleted = 0 AND IsActive = 1;
+
+    IF @Target IS NOT NULL
+    BEGIN
+        IF OBJECT_ID(N'dbo.Campuses', N'U') IS NOT NULL
+            SELECT TOP 1 @Campus = CampusId
+            FROM Campuses
+            WHERE InstituteId = @Target AND IsDeleted = 0
+            ORDER BY CampusId;
+
+        IF OBJECT_ID(N'dbo.Students', N'U') IS NOT NULL
+            UPDATE Students SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.StudentGuardians', N'U') IS NOT NULL
+            UPDATE StudentGuardians SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.StudentClassEnrollments', N'U') IS NOT NULL
+            UPDATE StudentClassEnrollments SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.Classes', N'U') IS NOT NULL
+            UPDATE Classes SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.Subjects', N'U') IS NOT NULL
+            UPDATE Subjects SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.ClassSubjects', N'U') IS NOT NULL
+            UPDATE ClassSubjects SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.Staff', N'U') IS NOT NULL
+            UPDATE Staff SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.Users', N'U') IS NOT NULL
+            UPDATE Users SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0
+              AND (@SuperAdminRole IS NULL OR RoleId <> @SuperAdminRole);
+
+        IF OBJECT_ID(N'dbo.Attendances', N'U') IS NOT NULL
+            UPDATE Attendances SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.Homeworks', N'U') IS NOT NULL
+            UPDATE Homeworks SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.HomeworkSubmissions', N'U') IS NOT NULL
+            UPDATE HomeworkSubmissions SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.FeeTypes', N'U') IS NOT NULL
+            UPDATE FeeTypes SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.FeeStructures', N'U') IS NOT NULL
+            UPDATE FeeStructures SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.StudentFees', N'U') IS NOT NULL
+            UPDATE StudentFees SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.FeePayments', N'U') IS NOT NULL
+            UPDATE FeePayments SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.Periods', N'U') IS NOT NULL
+            UPDATE Periods SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.ScheduleProfiles', N'U') IS NOT NULL
+            UPDATE ScheduleProfiles SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.SchoolTimetables', N'U') IS NOT NULL
+            UPDATE SchoolTimetables SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.SchoolSettings', N'U') IS NOT NULL
+            UPDATE SchoolSettings SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL;
+
+        IF OBJECT_ID(N'dbo.ExamPapers', N'U') IS NOT NULL
+            UPDATE ExamPapers SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.ExamSchedules', N'U') IS NOT NULL
+            UPDATE ExamSchedules SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.ExamResults', N'U') IS NOT NULL
+            UPDATE ExamResults SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.CoursePlans', N'U') IS NOT NULL
+            UPDATE CoursePlans SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+
+        IF OBJECT_ID(N'dbo.AcademicYears', N'U') IS NOT NULL
+            UPDATE AcademicYears SET InstituteId = @Target, CampusId = COALESCE(CampusId, @Campus)
+            WHERE InstituteId IS NULL AND IsDeleted = 0;
+    END
+
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'Manual_BackfillNullTenant_20261031', N'9.0.0');
+END");
 }
 catch (Exception ex)
 {
