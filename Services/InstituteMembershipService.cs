@@ -116,7 +116,22 @@ public class InstituteMembershipService : IInstituteMembershipService
                 return (creator.InstituteId, creator.CampusId ?? campusId);
         }
 
-        // 5) Same email domain as another user who already has a tenant
+        // 5) Users / classes this account created (orphan school admin with no Staff row)
+        var createdUser = await _db.Users.AsNoTracking().IgnoreQueryFilters()
+            .Where(u => u.CreatedBy == userId && !u.IsDeleted && u.InstituteId != null)
+            .Select(u => new { u.InstituteId, u.CampusId })
+            .FirstOrDefaultAsync();
+        if (createdUser?.InstituteId != null)
+            return (createdUser.InstituteId, createdUser.CampusId ?? campusId);
+
+        var createdClass = await _db.Classes.AsNoTracking().IgnoreQueryFilters()
+            .Where(c => c.CreatedBy == userId && !c.IsDeleted && c.InstituteId != null)
+            .Select(c => new { c.InstituteId, c.CampusId })
+            .FirstOrDefaultAsync();
+        if (createdClass?.InstituteId != null)
+            return (createdClass.InstituteId, createdClass.CampusId ?? campusId);
+
+        // 6) Same email domain as another user who already has a tenant
         var email = profile?.Email ?? "";
         var at = email.LastIndexOf('@');
         if (at > 0 && at < email.Length - 1)
@@ -140,10 +155,32 @@ public class InstituteMembershipService : IInstituteMembershipService
                 .FirstOrDefaultAsync();
             if (byInstEmail.HasValue)
                 return (byInstEmail, campusId);
+
+            // 7) Email domain head vs institute name
+            // e.g. ADMIN@HAPPYDAY.COM → "happyday" matches "HAPPY DAY EDUCATIONAL INSTITUTE"
+            var domainHead = domain.Split('.')[0];
+            if (domainHead.Length >= 4)
+            {
+                var token = NormalizeToken(domainHead);
+                var institutes = await _db.Institutes.AsNoTracking().IgnoreQueryFilters()
+                    .Where(i => i.IsActive)
+                    .Select(i => new { i.InstituteId, i.Name })
+                    .ToListAsync();
+                var byName = institutes.FirstOrDefault(i =>
+                {
+                    var nameToken = NormalizeToken(i.Name);
+                    return nameToken.Contains(token) || token.Contains(nameToken);
+                });
+                if (byName != null)
+                    return (byName.InstituteId, campusId);
+            }
         }
 
         return (null, campusId);
     }
+
+    private static string NormalizeToken(string value) =>
+        new string(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     private async Task HealUserAsync(int userId, int instituteId, int? campusId)
     {
