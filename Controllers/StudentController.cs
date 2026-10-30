@@ -57,6 +57,11 @@ public class StudentController : ControllerBase
                 FullName    = (s.FirstName + " " + s.LastName).Trim(),
                 DateOfBirth = s.DateOfBirth,
                 Gender      = s.Gender,
+                Phone       = s.Guardians
+                    .Where(g => !g.IsDeleted)
+                    .OrderBy(g => g.GuardianId)
+                    .Select(g => g.Phone)
+                    .FirstOrDefault(),
                 PhotoFileId = s.PhotoFileId,
                 IsActive    = s.IsActive,
                 ClassId = s.Enrollments

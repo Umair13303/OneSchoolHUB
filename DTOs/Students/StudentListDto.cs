@@ -9,6 +9,9 @@ public class StudentListDto
     public DateOnly? DateOfBirth    { get; set; }
     public string?  Gender          { get; set; }
 
+    /// <summary>Phone of the student's earliest guardian (the admission contact).</summary>
+    public string?  Phone           { get; set; }
+
     /// <summary>The student's current active class (if any).</summary>
     public int?     ClassId         { get; set; }
     public string?  ClassName       { get; set; }

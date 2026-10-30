@@ -82,6 +82,11 @@ public class StudentService : IStudentService
                 FullName    = (st.FirstName + " " + st.LastName).Trim(),
                 DateOfBirth = st.DateOfBirth,
                 Gender      = st.Gender,
+                Phone       = st.Guardians
+                    .Where(g => !g.IsDeleted)
+                    .OrderBy(g => g.GuardianId)
+                    .Select(g => g.Phone)
+                    .FirstOrDefault(),
                 PhotoFileId = st.PhotoFileId,
                 IsActive    = st.IsActive,
 
