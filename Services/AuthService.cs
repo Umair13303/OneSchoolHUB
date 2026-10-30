@@ -20,13 +20,20 @@ public class AuthService : IAuthService
     private readonly LoggingDbContext _logDb;
     private readonly JwtHelper _jwtHelper;
     private readonly IConfiguration _config;
+    private readonly IInstituteMembershipService _membership;
 
-    public AuthService(AppDbContext db, LoggingDbContext logDb, JwtHelper jwtHelper, IConfiguration config)
+    public AuthService(
+        AppDbContext db,
+        LoggingDbContext logDb,
+        JwtHelper jwtHelper,
+        IConfiguration config,
+        IInstituteMembershipService membership)
     {
         _db = db;
         _logDb = logDb;
         _jwtHelper = jwtHelper;
         _config = config;
+        _membership = membership;
     }
 
     public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request, HttpContext? httpContext = null)
@@ -57,23 +64,17 @@ public class AuthService : IAuthService
         if (row == null || !BCrypt.Net.BCrypt.Verify(request.Password, row.PasswordHash))
             return null;
 
-        Institute? institute = null;
-        if (row.InstituteId != null)
-        {
-            institute = new Institute
-            {
-                InstituteId = row.InstituteId.Value,
-                Name = row.InstituteName ?? string.Empty,
-                LogoUrl = row.InstituteLogoUrl,
-                LicenseValidUntil = row.LicenseValidUntil
-            };
-        }
+        var membership = await _membership.ResolveAsync(
+            row.UserId, row.InstituteId, row.CampusId, row.RoleName, heal: true);
+        var institute = membership?.Institute;
+        var instituteId = membership?.InstituteId ?? row.InstituteId;
+        var campusId = membership?.CampusId ?? row.CampusId;
 
         if (IsLicenseExpired(institute))
             throw new UnauthorizedAccessException("Your school's license has expired. Please contact the system administrator to renew it.");
 
         var user = ToAuthUser(row.UserId, row.FullName, row.Email, row.RoleId, row.RoleName,
-            row.InstituteId, row.CampusId, institute);
+            instituteId, campusId, institute);
 
         var ip = httpContext?.Connection?.RemoteIpAddress?.ToString();
         var ua = httpContext?.Request?.Headers["User-Agent"].ToString();
@@ -138,22 +139,18 @@ public class AuthService : IAuthService
             })
             .FirstOrDefaultAsync();
 
-        Institute? institute = null;
-        if (row?.InstituteId != null)
-        {
-            institute = new Institute
-            {
-                InstituteId = row.InstituteId.Value,
-                Name = row.InstituteName ?? string.Empty,
-                LogoUrl = row.InstituteLogoUrl,
-                LicenseValidUntil = row.LicenseValidUntil
-            };
-        }
+        if (row == null) return null;
 
-        if (row == null || IsLicenseExpired(institute)) return null;
+        var membership = await _membership.ResolveAsync(
+            row.UserId, row.InstituteId, row.CampusId, row.RoleName, heal: true);
+        var institute = membership?.Institute;
+        var instituteId = membership?.InstituteId ?? row.InstituteId;
+        var campusId = membership?.CampusId ?? row.CampusId;
+
+        if (IsLicenseExpired(institute)) return null;
 
         var user = ToAuthUser(row.UserId, row.FullName, row.Email, row.RoleId, row.RoleName,
-            row.InstituteId, row.CampusId, institute);
+            instituteId, campusId, institute);
         return await GenerateTokensAsync(user);
     }
 
@@ -228,6 +225,7 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync();
 
         string instituteName, tagline, logoUrl, copyrightText;
+        var isSuperAdmin = string.Equals(user.Role?.RoleName, "superadmin", StringComparison.OrdinalIgnoreCase);
 
         if (user.Institute != null)
         {
@@ -236,14 +234,21 @@ public class AuthService : IAuthService
             logoUrl        = user.Institute.LogoUrl ?? string.Empty;
             copyrightText  = string.Empty;
         }
-        else
+        else if (isSuperAdmin)
         {
-            // superadmin — pull from DevCompany table
+            // Platform branding for superadmin only — never for school users.
             var dev = await _db.DevCompany.AsNoTracking().FirstOrDefaultAsync();
             instituteName  = dev?.Name          ?? "Dev_Solutions";
             tagline        = dev?.Tagline        ?? string.Empty;
             logoUrl        = dev?.LogoUrl        ?? string.Empty;
             copyrightText  = dev?.CopyrightText  ?? string.Empty;
+        }
+        else
+        {
+            instituteName  = "School";
+            tagline        = string.Empty;
+            logoUrl        = string.Empty;
+            copyrightText  = string.Empty;
         }
 
         return new LoginResponseDto

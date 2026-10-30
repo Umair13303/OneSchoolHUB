@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolManagement.API.Data;
 using SchoolManagement.API.DTOs.User;
+using SchoolManagement.API.Infrastructure;
 using SchoolManagement.API.Models;
 
 namespace SchoolManagement.API.Services;
@@ -21,8 +22,13 @@ public interface IUserService
 public class UserService : IUserService
 {
     private readonly AppDbContext _db;
+    private readonly ITenantContext _tenant;
 
-    public UserService(AppDbContext db) => _db = db;
+    public UserService(AppDbContext db, ITenantContext tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     private static UserListDto MapDto(User u, bool includePassword = false) => new()
     {
@@ -86,6 +92,9 @@ public class UserService : IUserService
             Specialization = dto.Specialization,
             DateOfBirth    = dto.DateOfBirth,
             JoiningDate    = dto.JoiningDate,
+            // Explicit tenant stamp — interceptor skips when creator has no institute claim.
+            InstituteId    = _tenant.IsSuperAdmin ? null : _tenant.InstituteId,
+            CampusId       = _tenant.IsSuperAdmin ? null : _tenant.CampusId,
         };
 
         _db.Users.Add(user);

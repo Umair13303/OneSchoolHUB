@@ -86,6 +86,7 @@ builder.Services.AddSingleton<IUserIdProvider, CustomUserIdProvider>();
 
 // ── Services ──────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<JwtHelper>();
+builder.Services.AddScoped<IInstituteMembershipService, InstituteMembershipService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IMenuService, MenuService>();

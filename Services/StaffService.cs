@@ -144,7 +144,9 @@ public class StaffService : IStaffService
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
             RoleId       = staffRole.RoleId,
             IsActive     = true,
-            CreatedBy    = createdBy
+            CreatedBy    = createdBy,
+            InstituteId  = staff.InstituteId,
+            CampusId     = staff.CampusId
         };
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
