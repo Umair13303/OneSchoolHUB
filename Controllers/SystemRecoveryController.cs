@@ -11,21 +11,16 @@ namespace SchoolManagement.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/system-recovery")]
-[AllowAnonymous]
+[Authorize(Roles = "superadmin")]
 public class SystemRecoveryController : ControllerBase
 {
-    private const string RecoveryKey = "recover-20261031";
     private readonly AppDbContext _db;
 
     public SystemRecoveryController(AppDbContext db) => _db = db;
 
-    private bool Valid(string? key) =>
-        string.Equals(key, RecoveryKey, StringComparison.Ordinal);
-
     [HttpGet("audit")]
-    public async Task<IActionResult> Audit([FromQuery] string? key)
+    public async Task<IActionResult> Audit()
     {
-        if (!Valid(key)) return Unauthorized();
 
         var institutes = await _db.Institutes.IgnoreQueryFilters().AsNoTracking()
             .Select(i => new { i.InstituteId, i.Name, i.IsActive, i.IsDeleted })
@@ -60,10 +55,8 @@ public class SystemRecoveryController : ControllerBase
     /// Does not delete rows.
     /// </summary>
     [HttpPost("repair-happy-day")]
-    public async Task<IActionResult> Repair([FromQuery] string? key, [FromQuery] int? instituteId = null)
+    public async Task<IActionResult> Repair([FromQuery] int? instituteId = null)
     {
-        if (!Valid(key)) return Unauthorized();
-
         var target = instituteId;
         if (!target.HasValue)
         {
