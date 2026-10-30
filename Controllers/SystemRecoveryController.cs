@@ -11,24 +11,16 @@ namespace SchoolManagement.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/system-recovery")]
+[Authorize(Roles = "superadmin")]
 public class SystemRecoveryController : ControllerBase
 {
-    private const string RecoveryKey = "recover-20261031";
     private readonly AppDbContext _db;
 
     public SystemRecoveryController(AppDbContext db) => _db = db;
 
-    private bool ValidKey(string? key) =>
-        string.Equals(key, RecoveryKey, StringComparison.Ordinal);
-
-    private bool CanAccess(string? key) =>
-        ValidKey(key) || User.IsInRole("superadmin");
-
     [HttpGet("audit")]
-    [AllowAnonymous]
-    public async Task<IActionResult> Audit([FromQuery] string? key = null)
+    public async Task<IActionResult> Audit()
     {
-        if (!CanAccess(key)) return Unauthorized();
 
         var institutes = await _db.Institutes.IgnoreQueryFilters().AsNoTracking()
             .Select(i => new { i.InstituteId, i.Name, i.IsActive, i.IsDeleted })
@@ -63,13 +55,10 @@ public class SystemRecoveryController : ControllerBase
     /// Match is case-insensitive contains on email or full name.
     /// </summary>
     [HttpPost("detach-users")]
-    [AllowAnonymous]
     public async Task<IActionResult> DetachUsers(
-        [FromQuery] string? key = null,
         [FromQuery] int? fromInstituteId = 1,
         [FromBody] string[]? matches = null)
     {
-        if (!CanAccess(key)) return Unauthorized();
         matches ??= Array.Empty<string>();
         if (matches.Length == 0)
             return BadRequest(new { error = "Provide email/name match strings in body array." });
@@ -110,11 +99,8 @@ public class SystemRecoveryController : ControllerBase
     /// Does not delete rows.
     /// </summary>
     [HttpPost("repair-happy-day")]
-    [AllowAnonymous]
-    public async Task<IActionResult> Repair([FromQuery] string? key = null, [FromQuery] int? instituteId = null)
+    public async Task<IActionResult> Repair([FromQuery] int? instituteId = null)
     {
-        if (!CanAccess(key)) return Unauthorized();
-
         var target = instituteId;
         if (!target.HasValue)
         {

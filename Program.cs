@@ -470,6 +470,33 @@ BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'Manual_DetachMismatchedHappyDayUsers_20261031', N'9.0.0');
 END");
+
+    // AcademicYear null rows are shared across tenants. Bulk backfill wrongly stamped
+    // 2025-26 onto Happy Day — move it to DEMO so Happy Day no longer sees it.
+    // (NULL would still show because the query filter treats null as shared.)
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+IF NOT EXISTS (
+    SELECT 1 FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'Manual_DetachMismatchedHappyDayYear_20261031')
+BEGIN
+    DECLARE @Demo INT = (
+        SELECT TOP 1 InstituteId FROM Institutes
+        WHERE IsDeleted = 0 AND REPLACE(LOWER(Name), N' ', N'') LIKE N'%demo%'
+        ORDER BY InstituteId);
+
+    IF @Demo IS NOT NULL
+    BEGIN
+        UPDATE AcademicYears
+        SET InstituteId = @Demo,
+            UpdatedAt = SYSUTCDATETIME()
+        WHERE IsDeleted = 0
+          AND InstituteId = 1
+          AND YearLabel = N'2025-26';
+    END
+
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'Manual_DetachMismatchedHappyDayYear_20261031', N'9.0.0');
+END");
 }
 catch (Exception ex)
 {
