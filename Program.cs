@@ -447,6 +447,29 @@ BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'Manual_BackfillNullTenant_20261031', N'9.0.0');
 END");
+
+    // Detach users that were bulk-stamped onto Happy Day but do not belong there.
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+IF NOT EXISTS (
+    SELECT 1 FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'Manual_DetachMismatchedHappyDayUsers_20261031')
+BEGIN
+    UPDATE Users
+    SET InstituteId = NULL,
+        CampusId = NULL,
+        UpdatedAt = SYSUTCDATETIME()
+    WHERE IsDeleted = 0
+      AND InstituteId = 1
+      AND (
+            LOWER(Email) LIKE N'%te4@gmail.com%'
+         OR LOWER(Email) LIKE N'vc@happyday%'
+         OR LOWER(Email) LIKE N'%vc@happyday%'
+         OR LOWER(FullName) LIKE N'%vc@happyday%'
+      );
+
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'Manual_DetachMismatchedHappyDayUsers_20261031', N'9.0.0');
+END");
 }
 catch (Exception ex)
 {
