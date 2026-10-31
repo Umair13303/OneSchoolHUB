@@ -572,8 +572,8 @@ public class CurriculumService : ICurriculumService
 
     public async Task<List<CoursePlanListDto>> GetMyCoursesAsync(int teacherId)
     {
-        var assignments = await _db.ClassSubjects
-            .Where(cs => cs.TeacherId == teacherId && cs.IsActive)
+        var assignments = await _db.ClassSubjects.AsNoTracking()
+            .Where(cs => cs.TeacherId == teacherId && cs.IsActive && !cs.IsDeleted)
             .Select(cs => new { cs.ClassId, cs.SubjectId })
             .ToListAsync();
 
@@ -581,24 +581,39 @@ public class CurriculumService : ICurriculumService
 
         var classIds = assignments.Select(a => a.ClassId).Distinct().ToList();
         var subjectIds = assignments.Select(a => a.SubjectId).Distinct().ToList();
+        var assignedPairs = assignments.Select(a => (a.ClassId, a.SubjectId)).ToHashSet();
 
+        // Project in SQL — avoid deep ThenInclude(Progress) which has failed on live.
         var plans = await _db.CoursePlans.AsNoTracking()
-            .Include(p => p.AcademicYear)
-            .Include(p => p.Class)
-            .Include(p => p.Subject)
-            .Include(p => p.Chapters.Where(c => !c.IsDeleted))
-                .ThenInclude(c => c.Topics.Where(t => !t.IsDeleted))
-                    .ThenInclude(t => t.Progress)
             .Where(p => !p.IsDeleted
                         && p.Status != "Archived"
                         && classIds.Contains(p.ClassId)
                         && subjectIds.Contains(p.SubjectId))
+            .Select(p => new CoursePlanListDto
+            {
+                CoursePlanId = p.CoursePlanId,
+                AcademicYearId = p.AcademicYearId,
+                YearLabel = p.AcademicYear != null ? p.AcademicYear.YearLabel : "",
+                ClassId = p.ClassId,
+                ClassName = p.Class != null ? p.Class.ClassName : "",
+                Section = p.Class != null ? p.Class.Section : null,
+                SubjectId = p.SubjectId,
+                SubjectName = p.Subject != null ? p.Subject.SubjectName : "",
+                Title = p.Title,
+                Description = p.Description,
+                Status = p.Status,
+                PublishedAt = p.PublishedAt,
+                ChapterCount = p.Chapters.Count(c => !c.IsDeleted),
+                TopicCount = p.Chapters.Where(c => !c.IsDeleted)
+                    .SelectMany(c => c.Topics.Where(t => !t.IsDeleted)).Count(),
+                CompletedTopicCount = p.Chapters.Where(c => !c.IsDeleted)
+                    .SelectMany(c => c.Topics.Where(t => !t.IsDeleted))
+                    .Count(t => t.Progress != null && t.Progress.Status == "Completed")
+            })
             .ToListAsync();
 
-        var assignedPairs = assignments.Select(a => (a.ClassId, a.SubjectId)).ToHashSet();
         return plans
             .Where(p => assignedPairs.Contains((p.ClassId, p.SubjectId)))
-            .Select(MapPlanList)
             .OrderBy(p => p.ClassName).ThenBy(p => p.SubjectName)
             .ToList();
     }
@@ -608,7 +623,7 @@ public class CurriculumService : ICurriculumService
         var assignments = await _db.ClassSubjects.AsNoTracking()
             .Include(cs => cs.Class)
             .Include(cs => cs.Subject)
-            .Where(cs => cs.TeacherId == teacherId && cs.IsActive)
+            .Where(cs => cs.TeacherId == teacherId && cs.IsActive && !cs.IsDeleted)
             .ToListAsync();
 
         if (assignments.Count == 0) return new();
@@ -616,31 +631,18 @@ public class CurriculumService : ICurriculumService
         var classIds = assignments.Select(a => a.ClassId).Distinct().ToList();
         var subjectIds = assignments.Select(a => a.SubjectId).Distinct().ToList();
 
-        var classYears = await _db.Classes.AsNoTracking()
-            .Where(c => classIds.Contains(c.ClassId))
-            .Select(c => new
-            {
-                c.ClassId,
-                AcademicYearId = EF.Property<int?>(c, "AcademicYearId")
-            })
-            .ToListAsync();
-
-        var yearIds = classYears.Where(c => c.AcademicYearId.HasValue)
-            .Select(c => c.AcademicYearId!.Value).Distinct().ToList();
-
-        // Fall back to active year(s) when class has no year link
-        if (yearIds.Count == 0)
-        {
-            yearIds = await _db.AcademicYears.AsNoTracking()
-                .Where(y => y.IsActive && !y.IsDeleted)
-                .Select(y => y.AcademicYearId)
-                .ToListAsync();
-        }
-
+        // Class has no AcademicYearId column — use active year(s) for this tenant.
         var years = await _db.AcademicYears.AsNoTracking()
-            .Where(y => yearIds.Contains(y.AcademicYearId) || (y.IsActive && !y.IsDeleted))
+            .Where(y => !y.IsDeleted)
             .Select(y => new { y.AcademicYearId, y.YearLabel, y.IsActive })
             .ToListAsync();
+
+        var activeYears = years.Where(y => y.IsActive).ToList();
+        if (activeYears.Count == 0)
+            activeYears = years.ToList();
+
+        var fallbackYear = activeYears.FirstOrDefault() ?? years.FirstOrDefault();
+        var yearId = fallbackYear?.AcademicYearId ?? 0;
 
         var plans = await _db.CoursePlans.AsNoTracking()
             .Where(p => !p.IsDeleted && p.Status != "Archived"
@@ -649,29 +651,31 @@ public class CurriculumService : ICurriculumService
             .Select(p => new { p.CoursePlanId, p.ClassId, p.SubjectId, p.AcademicYearId, p.Status, p.Title })
             .ToListAsync();
 
-        var fallbackYear = years.FirstOrDefault(y => y.IsActive) ?? years.FirstOrDefault();
-
         return assignments
             .Select(cs =>
             {
-                var cy = classYears.FirstOrDefault(c => c.ClassId == cs.ClassId);
-                var yearId = cy?.AcademicYearId ?? fallbackYear?.AcademicYearId ?? 0;
-                var year = years.FirstOrDefault(y => y.AcademicYearId == yearId) ?? fallbackYear;
                 var plan = yearId == 0
                     ? null
                     : plans.FirstOrDefault(p =>
                         p.ClassId == cs.ClassId &&
                         p.SubjectId == cs.SubjectId &&
-                        p.AcademicYearId == yearId);
+                        p.AcademicYearId == yearId)
+                      ?? plans.FirstOrDefault(p =>
+                        p.ClassId == cs.ClassId &&
+                        p.SubjectId == cs.SubjectId);
+                var planYear = plan != null
+                    ? years.FirstOrDefault(y => y.AcademicYearId == plan.AcademicYearId)
+                    : null;
+                var slotYear = planYear ?? fallbackYear;
                 return new TeacherCourseSlotDto
                 {
                     ClassId = cs.ClassId,
-                    ClassName = cs.Class.ClassName,
-                    Section = cs.Class.Section,
+                    ClassName = cs.Class?.ClassName ?? "",
+                    Section = cs.Class?.Section,
                     SubjectId = cs.SubjectId,
-                    SubjectName = cs.Subject.SubjectName,
-                    AcademicYearId = yearId,
-                    YearLabel = year?.YearLabel ?? "",
+                    SubjectName = cs.Subject?.SubjectName ?? "",
+                    AcademicYearId = slotYear?.AcademicYearId ?? yearId,
+                    YearLabel = slotYear?.YearLabel ?? "",
                     CoursePlanId = plan?.CoursePlanId,
                     PlanStatus = plan?.Status,
                     PlanTitle = plan?.Title
