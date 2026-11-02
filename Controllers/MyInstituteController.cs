@@ -61,6 +61,6 @@ public class MyInstituteController : ControllerBase
 
         if (i == null) return NoContent();
 
-        return Ok(new { i.InstituteId, i.Name, i.LogoUrl, i.ChallanTemplate, i.SchoolStampUrl });
+        return Ok(new { i.InstituteId, i.Name, i.LogoUrl, i.Phone, i.Email, i.Address, i.ChallanTemplate, i.SchoolStampUrl });
     }
 }
