@@ -114,6 +114,10 @@ builder.Services.Configure<SchoolManagement.API.Services.Ai.AiGenerationOptions>
     builder.Configuration.GetSection(SchoolManagement.API.Services.Ai.AiGenerationOptions.SectionName));
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient("AiProvider");
+builder.Services.AddHttpClient("FileServer", c =>
+{
+    c.Timeout = TimeSpan.FromMinutes(2);
+});
 builder.Services.AddScoped<SchoolManagement.API.Services.Ai.OpenAiCompatibleProvider>();
 builder.Services.AddScoped<SchoolManagement.API.Services.Ai.FakeAiProvider>();
 builder.Services.AddScoped<SchoolManagement.API.Services.Ai.IAiProvider>(sp =>
