@@ -108,16 +108,17 @@ public class FilesProxyController : ControllerBase
         if (client is null || string.IsNullOrWhiteSpace(baseUrl))
             return NotFound();
 
-        using var res = await client.GetAsync($"{baseUrl}/api/files/{fileId}", HttpCompletionOption.ResponseHeadersRead, ct);
+        using var res = await client.GetAsync($"{baseUrl}/api/files/{fileId}", ct);
         if (!res.IsSuccessStatusCode)
             return StatusCode((int)res.StatusCode);
 
         var contentType = res.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
-        var stream = await res.Content.ReadAsStreamAsync(ct);
+        // Buffer fully — disposing the HttpResponseMessage must not close the body mid-stream.
+        var bytes = await res.Content.ReadAsByteArrayAsync(ct);
         var fileName = res.Content.Headers.ContentDisposition?.FileName?.Trim('"');
         if (!string.IsNullOrWhiteSpace(fileName))
-            return File(stream, contentType, fileName);
-        return File(stream, contentType);
+            return File(bytes, contentType, fileName);
+        return File(bytes, contentType);
     }
 
     [HttpGet("{fileId:int}/info")]
