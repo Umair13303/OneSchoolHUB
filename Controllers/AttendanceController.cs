@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManagement.API.DTOs.Attendance;
+using SchoolManagement.API.Helpers;
 using SchoolManagement.API.Services;
 using System.Security.Claims;
 
@@ -96,7 +97,7 @@ public class AttendanceController : ControllerBase
         if (!DateOnly.TryParse(date, out var parsedDate))
             return BadRequest(new { error = "date must be in yyyy-MM-dd format." });
 
-        if (User.IsInRole("parent") && !await _parentAccess.HasChildInClassAsync(CurrentUserId(), classId))
+        if (User.IsParentOnly() && !await _parentAccess.HasChildInClassAsync(CurrentUserId(), classId))
             return Forbid();
 
         return Ok(await _service.GetForClassAsync(classId, parsedDate, periodId));
@@ -110,7 +111,7 @@ public class AttendanceController : ControllerBase
         [FromQuery] string? from,
         [FromQuery] string? to)
     {
-        if (User.IsInRole("parent") && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId))
+        if (User.IsParentOnly() && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId))
             return Forbid();
 
         DateOnly? fromDate = ParseDate(from);
@@ -126,7 +127,7 @@ public class AttendanceController : ControllerBase
         [FromQuery] string? from,
         [FromQuery] string? to)
     {
-        if (User.IsInRole("parent") && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId))
+        if (User.IsParentOnly() && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId))
             return Forbid();
 
         var summary = await _service.GetSummaryAsync(studentId, ParseDate(from), ParseDate(to));

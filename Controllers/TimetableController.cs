@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SchoolManagement.API.Data;
 using SchoolManagement.API.DTOs.Timetable;
+using SchoolManagement.API.Helpers;
 using SchoolManagement.API.Services;
 using System.Security.Claims;
 
@@ -59,7 +60,7 @@ public class TimetableController : ControllerBase
         if (classId <= 0)
             return BadRequest(new { error = "classId query parameter is required." });
 
-        if (User.IsInRole("parent") && !await _parentAccess.HasChildInClassAsync(CurrentUserId(), classId))
+        if (User.IsParentOnly() && !await _parentAccess.HasChildInClassAsync(CurrentUserId(), classId))
             return Forbid();
 
         return Ok(await _service.GetForClassAsync(classId, dayOfWeek, academicYearId));
@@ -136,7 +137,7 @@ public class TimetableController : ControllerBase
         if (classId <= 0)
             return BadRequest(new { error = "classId query parameter is required." });
 
-        if (User.IsInRole("parent") && !await _parentAccess.HasChildInClassAsync(CurrentUserId(), classId))
+        if (User.IsParentOnly() && !await _parentAccess.HasChildInClassAsync(CurrentUserId(), classId))
             return Forbid();
 
         var cls = await _classes.GetByIdAsync(classId);

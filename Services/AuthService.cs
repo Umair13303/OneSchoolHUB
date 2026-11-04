@@ -210,7 +210,20 @@ public class AuthService : IAuthService
 
     private async Task<LoginResponseDto> GenerateTokensAsync(User user)
     {
-        var accessToken = _jwtHelper.GenerateAccessToken(user);
+        // Derived parent capability: any staff/teacher linked via StudentGuardians.
+        var isAlsoParent = user.RoleId != 5 && await _db.StudentGuardians
+            .IgnoreQueryFilters()
+            .AnyAsync(g => g.UserId == user.UserId && !g.IsDeleted);
+
+        List<string>? extraRoles = null;
+        List<int>? extraRoleIds = null;
+        if (isAlsoParent)
+        {
+            extraRoles = new List<string> { "parent" };
+            extraRoleIds = new List<int> { 5 };
+        }
+
+        var accessToken = _jwtHelper.GenerateAccessToken(user, extraRoles, extraRoleIds);
         var refreshTokenStr = _jwtHelper.GenerateRefreshToken();
         var refreshExpiryDays = int.Parse(_config["Jwt:RefreshTokenExpiryDays"] ?? "7");
         var expiryMinutes = int.Parse(_config["Jwt:ExpiryMinutes"] ?? "60");
@@ -251,6 +264,11 @@ public class AuthService : IAuthService
             copyrightText  = string.Empty;
         }
 
+        var primaryRole = user.Role.RoleName;
+        var roles = new List<string> { primaryRole.ToLowerInvariant() };
+        if (isAlsoParent) roles.Add("parent");
+        if (user.RoleId == 5 && !roles.Contains("parent")) roles.Add("parent");
+
         return new LoginResponseDto
         {
             AccessToken = accessToken,
@@ -261,8 +279,10 @@ public class AuthService : IAuthService
                 UserId        = user.UserId,
                 FullName      = user.FullName,
                 Email         = user.Email,
-                Role          = user.Role.RoleName,
+                Role          = primaryRole,
                 RoleId        = user.RoleId,
+                Roles         = roles.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                IsAlsoParent  = isAlsoParent || user.RoleId == 5,
                 InstituteId   = user.InstituteId,
                 CampusId      = user.CampusId,
                 InstituteName = instituteName,

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManagement.API.DTOs.Homework;
+using SchoolManagement.API.Helpers;
 using SchoolManagement.API.Services;
 using System.Security.Claims;
 
@@ -85,7 +86,7 @@ public class HomeworkController : ControllerBase
         else if (date is not null)
             parsedDate = DateOnly.Parse(date);
 
-        if (User.IsInRole("parent") && !await _parentAccess.HasChildInClassAsync(CurrentUserId(), classId))
+        if (User.IsParentOnly() && !await _parentAccess.HasChildInClassAsync(CurrentUserId(), classId))
             return Forbid();
 
         return Ok(await _service.GetForClassAsync(classId, parsedDate, subjectId));
@@ -99,7 +100,7 @@ public class HomeworkController : ControllerBase
         [FromQuery] string? from,
         [FromQuery] string? to)
     {
-        if (User.IsInRole("parent") && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId))
+        if (User.IsParentOnly() && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId))
             return Forbid();
 
         return Ok(await _service.GetForStudentAsync(studentId, ParseDate(from), ParseDate(to)));
@@ -134,7 +135,7 @@ public class HomeworkController : ControllerBase
     [Authorize(Roles = "parent,student,teacher,admin,principal")]
     public async Task<IActionResult> Submit(int id, [FromBody] SubmitHomeworkDto dto)
     {
-        if (User.IsInRole("parent") && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), dto.StudentId))
+        if (User.IsParentOnly() && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), dto.StudentId))
             return Forbid();
 
         try
@@ -157,7 +158,7 @@ public class HomeworkController : ControllerBase
     [Authorize(Roles = "superadmin,admin,principal,teacher,parent")]
     public async Task<IActionResult> GetSubmissionByStudent(int id, int studentId)
     {
-        if (User.IsInRole("parent") && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId))
+        if (User.IsParentOnly() && !await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId))
             return Forbid();
 
         var dto = await _service.GetSubmissionByStudentAsync(id, studentId);

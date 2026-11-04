@@ -16,11 +16,14 @@ public class JwtHelper
         _config = config;
     }
 
-    public string GenerateAccessToken(User user)
+    /// <param name="extraRoles">Additional role names (e.g. "parent" when a teacher has linked children).</param>
+    /// <param name="extraRoleIds">Matching role IDs for menu union.</param>
+    public string GenerateAccessToken(User user, IEnumerable<string>? extraRoles = null, IEnumerable<int>? extraRoleIds = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+        var primaryRole = user.Role.RoleName.ToLowerInvariant();
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
@@ -30,10 +33,25 @@ public class JwtHelper
             new Claim(ClaimTypes.Name, user.FullName),
             // [Authorize(Roles = "...")] matches case-sensitively; normalize so a
             // differently-cased Roles row can never silently lock users out.
-            new Claim(ClaimTypes.Role, user.Role.RoleName.ToLowerInvariant()),
+            new Claim(ClaimTypes.Role, primaryRole),
             new Claim("roleId", user.RoleId.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        if (extraRoles != null)
+        {
+            foreach (var r in extraRoles
+                .Select(x => x.ToLowerInvariant())
+                .Where(x => x != primaryRole)
+                .Distinct())
+                claims.Add(new Claim(ClaimTypes.Role, r));
+        }
+
+        if (extraRoleIds != null)
+        {
+            foreach (var id in extraRoleIds.Where(id => id != user.RoleId).Distinct())
+                claims.Add(new Claim("roleId", id.ToString()));
+        }
 
         if (user.InstituteId.HasValue)
             claims.Add(new Claim("instituteId", user.InstituteId.Value.ToString()));

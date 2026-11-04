@@ -11,6 +11,9 @@ public interface IMenuService
     /// <summary>Returns the nested menu tree visible to the given role, filtered by institute modules.</summary>
     Task<List<MenuItemTreeDto>> GetMenuForRoleAsync(int roleId);
 
+    /// <summary>Union of menus for multiple roles (e.g. teacher + derived parent).</summary>
+    Task<List<MenuItemTreeDto>> GetMenuForRolesAsync(IReadOnlyCollection<int> roleIds);
+
     /// <summary>Flat list of all menu items + their assigned role IDs (SuperAdmin only).</summary>
     Task<List<MenuItemAdminDto>> GetAllForAdminAsync();
 
@@ -48,12 +51,18 @@ public class MenuService : IMenuService
     // ──────────────────────────────────────────────────────────────────────
     // Read — filtered tree for one role
     // ──────────────────────────────────────────────────────────────────────
-    public async Task<List<MenuItemTreeDto>> GetMenuForRoleAsync(int roleId)
+    public Task<List<MenuItemTreeDto>> GetMenuForRoleAsync(int roleId)
+        => GetMenuForRolesAsync(new[] { roleId });
+
+    public async Task<List<MenuItemTreeDto>> GetMenuForRolesAsync(IReadOnlyCollection<int> roleIds)
     {
+        if (roleIds.Count == 0)
+            return new List<MenuItemTreeDto>();
+
         var visibleItems = await _db.MenuItems
             .AsNoTracking()
             .Where(m => m.IsActive
-                     && m.MenuRolePermissions.Any(p => p.RoleId == roleId))
+                     && m.MenuRolePermissions.Any(p => roleIds.Contains(p.RoleId)))
             .OrderBy(m => m.SortOrder)
             .ThenBy(m => m.Title)
             .Select(m => new MenuItemTreeDto

@@ -20,6 +20,11 @@ public class Student : BaseEntity
     public DateOnly? LeavingDate   { get; set; }
     public string?   LeavingReason { get; set; }
 
+    /// <summary>Normalized guardian CNIC used to group siblings for discount/order.</summary>
+    public string? SiblingGroupKey { get; set; }
+    /// <summary>1 = eldest/first admitted in the group, 2 = second child, …</summary>
+    public int? SiblingOrder { get; set; }
+
     public FileStore? Photo { get; set; }
     public ICollection<StudentGuardian> Guardians { get; set; } = new List<StudentGuardian>();
     public ICollection<StudentClassEnrollment> Enrollments { get; set; } = new List<StudentClassEnrollment>();

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManagement.API.DTOs.Fees;
+using SchoolManagement.API.Helpers;
 using SchoolManagement.API.Services;
 using System.Security.Claims;
 
@@ -136,13 +137,13 @@ public class FeeController(IFeeService feeSvc, IParentAccessService parentAccess
     /// no studentId means "list everything", which is an admin-only view.
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "superadmin,admin,principal,parent")]
+    [Authorize(Roles = "superadmin,admin,principal,parent,teacher")]
     public async Task<IActionResult> GetStudentFees(
         [FromQuery] int? studentId, [FromQuery] int? classId,
         [FromQuery] int? academicYearId, [FromQuery] string? status,
         [FromQuery] int? instituteId, [FromQuery] int? campusId)
     {
-        if (User.IsInRole("parent"))
+        if (User.IsFeeScopedToOwnChildren())
         {
             if (!studentId.HasValue)
                 return BadRequest(new { error = "studentId is required." });
@@ -154,13 +155,13 @@ public class FeeController(IFeeService feeSvc, IParentAccessService parentAccess
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = "superadmin,admin,principal,parent")]
+    [Authorize(Roles = "superadmin,admin,principal,parent,teacher")]
     public async Task<IActionResult> GetStudentFee(int id)
     {
         var result = await feeSvc.GetStudentFeeByIdAsync(id);
         if (result is null) return NotFound();
 
-        if (User.IsInRole("parent") && !await parentAccess.IsGuardianOfAsync(CurrentUserId, result.StudentId))
+        if (User.IsFeeScopedToOwnChildren() && !await parentAccess.IsGuardianOfAsync(CurrentUserId, result.StudentId))
             return Forbid();
 
         return Ok(result);
@@ -222,10 +223,10 @@ public class FeeController(IFeeService feeSvc, IParentAccessService parentAccess
     // ── Payments ─────────────────────────────────────────────────────────────
 
     [HttpGet("{id}/payments")]
-    [Authorize(Roles = "superadmin,admin,principal,parent")]
+    [Authorize(Roles = "superadmin,admin,principal,parent,teacher")]
     public async Task<IActionResult> GetPayments(int id)
     {
-        if (User.IsInRole("parent"))
+        if (User.IsFeeScopedToOwnChildren())
         {
             var fee = await feeSvc.GetStudentFeeByIdAsync(id);
             if (fee is null) return NotFound();

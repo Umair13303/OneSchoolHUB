@@ -3,6 +3,7 @@ using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using SchoolManagement.API.DTOs.Exam;
 using SchoolManagement.API.DTOs.Reports;
+using SchoolManagement.API.DTOs.Students;
 using SchoolManagement.API.DTOs.Timetable;
 
 namespace SchoolManagement.API.Services;
@@ -17,6 +18,7 @@ public interface IPdfReportService
     byte[] TeacherWorkloadPdf(TeacherWorkloadReportDto data);
     byte[] ClassTimetablePdf(ClassTimetablePdfModel data);
     byte[] ExamPaperPdf(ExamPaperPdfModel data);
+    byte[] StudentIdCardPdf(StudentIdCardPdfModel data);
 }
 
 public class PdfReportService : IPdfReportService
@@ -804,6 +806,77 @@ public class PdfReportService : IPdfReportService
                             });
                         }
                     }
+                });
+            });
+        }).GeneratePdf();
+    }
+
+    // ── Student ID card (front + back side-by-side) ────────────────────────
+    public byte[] StudentIdCardPdf(StudentIdCardPdfModel d)
+    {
+        return Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4.Landscape());
+                page.Margin(24);
+                page.DefaultTextStyle(t => t.FontFamily("Arial").FontSize(9).FontColor(Grey));
+
+                page.Content().Row(row =>
+                {
+                    row.RelativeItem().Border(1).BorderColor(Border).Padding(10).Column(col =>
+                    {
+                        col.Item().Background(Accent).Padding(8).Row(hdr =>
+                        {
+                            if (d.LogoBytes is { Length: > 0 })
+                            {
+                                hdr.ConstantItem(36).Height(36).Background(White).Padding(2)
+                                    .Image(d.LogoBytes).FitArea();
+                                hdr.ConstantItem(8);
+                            }
+                            hdr.RelativeItem().Column(c =>
+                            {
+                                c.Item().Text(d.SchoolName).FontSize(12).Bold().FontColor(White);
+                                c.Item().Text("STUDENT IDENTITY CARD").FontSize(8).FontColor("#bfdbfe");
+                            });
+                        });
+                        col.Item().PaddingTop(10).Row(body =>
+                        {
+                            if (d.PhotoBytes is { Length: > 0 })
+                            {
+                                body.ConstantItem(72).Height(90).Border(1).BorderColor("#93c5fd")
+                                    .Image(d.PhotoBytes).FitArea();
+                                body.ConstantItem(10);
+                            }
+                            body.RelativeItem().Column(info =>
+                            {
+                                info.Item().Text(d.FullName).FontSize(14).Bold().FontColor(Accent);
+                                info.Item().PaddingTop(6).Text($"Admission No: {d.AdmissionNo}");
+                                info.Item().Text($"Class: {d.ClassLabel}");
+                                info.Item().Text($"DOB: {d.DateOfBirth}");
+                                info.Item().Text($"Gender: {d.Gender}");
+                                info.Item().PaddingTop(8).Text($"Blood: {d.BloodGroup}");
+                            });
+                        });
+                    });
+
+                    row.ConstantItem(16);
+
+                    row.RelativeItem().Border(1).BorderColor(Border).Padding(10).Column(col =>
+                    {
+                        col.Item().Background(Accent).Padding(8)
+                            .Text("Student Details").FontSize(12).Bold().FontColor(White);
+                        col.Item().PaddingTop(10).Text($"Phone: {d.Phone}");
+                        col.Item().Text($"Address: {d.Address}");
+                        col.Item().PaddingTop(8).Text($"Guardian: {d.GuardianName}");
+                        col.Item().Text($"Guardian Phone: {d.GuardianPhone}");
+                        if (!string.IsNullOrWhiteSpace(d.SchoolPhone))
+                            col.Item().PaddingTop(8).Text($"School: {d.SchoolPhone}");
+                        if (!string.IsNullOrWhiteSpace(d.SchoolAddress))
+                            col.Item().Text(d.SchoolAddress!);
+                        col.Item().PaddingTop(12).Text($"If found, please return to {d.SchoolName}.")
+                            .FontSize(8).Italic().FontColor("#6b7280");
+                    });
                 });
             });
         }).GeneratePdf();

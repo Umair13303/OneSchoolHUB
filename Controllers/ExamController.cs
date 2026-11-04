@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SchoolManagement.API.Data;
 using SchoolManagement.API.DTOs.Assessment;
 using SchoolManagement.API.DTOs.Exam;
+using SchoolManagement.API.Helpers;
 using SchoolManagement.API.Models;
 using SchoolManagement.API.Services;
 using System.Security.Claims;
@@ -50,12 +51,14 @@ public class ExamController : ControllerBase
     private readonly IExamService _service;
     private readonly IPdfReportService _pdf;
     private readonly AppDbContext _db;
+    private readonly IParentAccessService _parentAccess;
 
-    public ExamController(IExamService service, IPdfReportService pdf, AppDbContext db)
+    public ExamController(IExamService service, IPdfReportService pdf, AppDbContext db, IParentAccessService parentAccess)
     {
         _service = service;
         _pdf = pdf;
         _db = db;
+        _parentAccess = parentAccess;
     }
 
     private int CurrentUserId() =>
@@ -465,7 +468,12 @@ public class ExamController : ControllerBase
     [Authorize(Roles = "superadmin,admin,principal,teacher,parent")]
     public async Task<IActionResult> GetStudentResults(int studentId, [FromQuery] int? academicYearId = null)
     {
-        int? teacherId = IsTeacherOnly() ? CurrentUserId() : null;
+        var isGuardian = await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId);
+        if (User.IsParentOnly() && !isGuardian)
+            return Forbid();
+
+        // Teacher viewing own child as parent: show full card (all subjects), not teacher-scoped.
+        int? teacherId = IsTeacherOnly() && !isGuardian ? CurrentUserId() : null;
         var results = await _service.GetStudentResultsAsync(studentId, academicYearId, teacherId);
         return Ok(results);
     }
@@ -484,7 +492,11 @@ public class ExamController : ControllerBase
         if (academicYearId == 0) return BadRequest(new { error = "academicYearId is required." });
         try
         {
-            int? teacherId = IsTeacherOnly() ? CurrentUserId() : null;
+            var isGuardian = await _parentAccess.IsGuardianOfAsync(CurrentUserId(), studentId);
+            if (User.IsParentOnly() && !isGuardian)
+                return Forbid();
+
+            int? teacherId = IsTeacherOnly() && !isGuardian ? CurrentUserId() : null;
             var card = await _service.GetStudentResultCardAsync(studentId, academicYearId, examType, teacherId);
             return Ok(card);
         }

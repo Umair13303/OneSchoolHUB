@@ -19,6 +19,8 @@ public interface IClassService
     Task<ClassSubjectDto?> ToggleSubjectStatusAsync(int classId, int classSubjectId, int updatedBy);
     Task<List<ClassSubjectDto>> GetAssignmentsByTeacherAsync(int teacherId);
     Task<ClassSubjectDto?> UnassignTeacherAsync(int classId, int classSubjectId, int updatedBy);
+    Task<ClassDto> SetClassTeacherAsync(int classId, AssignClassTeacherDto dto, int updatedBy);
+    Task<List<ClassDto>> GetClassesByClassTeacherAsync(int teacherId);
 }
 
 public class ClassService : IClassService
@@ -31,6 +33,7 @@ public class ClassService : IClassService
     {
         var classes = await _db.Classes
             .AsNoTracking()
+            .Include(c => c.ClassTeacher)
             .Include(c => c.ClassSubjects).ThenInclude(cs => cs.Subject)
             .Include(c => c.ClassSubjects).ThenInclude(cs => cs.Teacher)
             .OrderBy(c => c.ClassName).ThenBy(c => c.Section)
@@ -46,6 +49,7 @@ public class ClassService : IClassService
         var entity = await _db.Classes
             .AsNoTracking()
             .Where(c => c.ClassId == id)
+            .Include(c => c.ClassTeacher)
             .Include(c => c.ClassSubjects).ThenInclude(cs => cs.Subject)
             .Include(c => c.ClassSubjects).ThenInclude(cs => cs.Teacher)
             .FirstOrDefaultAsync();
@@ -139,8 +143,8 @@ public class ClassService : IClassService
 
     public async Task<ClassSubjectDto> AssignTeacherAsync(int classId, AssignTeacherDto dto, int createdBy)
     {
-        var classExists = await _db.Classes.AnyAsync(c => c.ClassId == classId);
-        if (!classExists) throw new ArgumentException($"Class {classId} does not exist.");
+        var clazz = await _db.Classes.FirstOrDefaultAsync(c => c.ClassId == classId);
+        if (clazz is null) throw new ArgumentException($"Class {classId} does not exist.");
 
         var subjectExists = await _db.Subjects.AnyAsync(s => s.SubjectId == dto.SubjectId);
         if (!subjectExists) throw new ArgumentException($"Subject {dto.SubjectId} does not exist.");
@@ -161,7 +165,10 @@ public class ClassService : IClassService
         var existing = await _db.ClassSubjects
             .FirstOrDefaultAsync(cs => cs.ClassId == classId && cs.SubjectId == dto.SubjectId);
 
-        int? teacherId = (dto.TeacherId.HasValue && dto.TeacherId.Value > 0) ? dto.TeacherId : null;
+        // Prefer explicit teacher; else inherit class teacher for early-grade full-day classes.
+        int? teacherId = (dto.TeacherId.HasValue && dto.TeacherId.Value > 0)
+            ? dto.TeacherId
+            : clazz.ClassTeacherId;
 
         if (existing is null)
         {
@@ -309,6 +316,69 @@ public class ClassService : IClassService
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Sets the class teacher for one class only. When a teacher is assigned,
+    /// every existing ClassSubject on that class is pointed at the same teacher
+    /// so Classroom Today / attendance / curriculum keep working for a full-day teacher.
+    /// </summary>
+    public async Task<ClassDto> SetClassTeacherAsync(int classId, AssignClassTeacherDto dto, int updatedBy)
+    {
+        var entity = await _db.Classes
+            .Include(c => c.ClassSubjects)
+            .FirstOrDefaultAsync(c => c.ClassId == classId);
+        if (entity is null)
+            throw new ArgumentException($"Class {classId} does not exist.");
+
+        int? teacherId = (dto.TeacherId.HasValue && dto.TeacherId.Value > 0) ? dto.TeacherId : null;
+
+        if (teacherId.HasValue)
+        {
+            var teacher = await _db.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.UserId == teacherId.Value && u.IsActive);
+            if (teacher is null)
+                throw new ArgumentException($"Teacher {teacherId} not found or inactive.");
+            if (!string.Equals(teacher.Role.RoleName, "teacher", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"User {teacherId} is not a teacher (role: {teacher.Role.RoleName}).");
+
+            entity.ClassTeacherId = teacherId;
+
+            foreach (var cs in entity.ClassSubjects)
+            {
+                cs.TeacherId = teacherId;
+                cs.IsActive  = true;
+                cs.UpdatedBy = updatedBy;
+                cs.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        else
+        {
+            entity.ClassTeacherId = null;
+        }
+
+        entity.UpdatedBy = updatedBy;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return (await GetByIdAsync(classId))!;
+    }
+
+    public async Task<List<ClassDto>> GetClassesByClassTeacherAsync(int teacherId)
+    {
+        var classes = await _db.Classes
+            .AsNoTracking()
+            .Where(c => c.ClassTeacherId == teacherId && c.IsActive)
+            .Include(c => c.ClassTeacher)
+            .Include(c => c.ClassSubjects).ThenInclude(cs => cs.Subject)
+            .Include(c => c.ClassSubjects).ThenInclude(cs => cs.Teacher)
+            .OrderBy(c => c.ClassName).ThenBy(c => c.Section)
+            .ToListAsync();
+
+        var instituteNames = await GetInstituteNamesAsync(classes.Select(c => c.InstituteId));
+        var campusNames    = await GetCampusNamesAsync(classes.Select(c => c.CampusId));
+        return classes.Select(c => MapToDto(c, instituteNames, campusNames)).ToList();
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     private async Task<Dictionary<int, string>> GetInstituteNamesAsync(IEnumerable<int?> instituteIds)
     {
@@ -343,6 +413,8 @@ public class ClassService : IClassService
         InstituteName = c.InstituteId.HasValue && instituteNames.TryGetValue(c.InstituteId.Value, out var n) ? n : null,
         CampusId      = c.CampusId,
         CampusName    = c.CampusId.HasValue && campusNames.TryGetValue(c.CampusId.Value, out var cn) ? cn : null,
+        ClassTeacherId   = c.ClassTeacherId,
+        ClassTeacherName = c.ClassTeacher?.FullName,
         SubjectCount      = c.ClassSubjects.Count,
         Subjects          = c.ClassSubjects.Select(cs => new ClassSubjectDto
         {

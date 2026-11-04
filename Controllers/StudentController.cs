@@ -25,12 +25,18 @@ public class StudentController : ControllerBase
     private readonly IStudentService _service;
     private readonly AppDbContext _db;
     private readonly IParentAccessService _parentAccess;
+    private readonly IPdfReportService _pdf;
 
-    public StudentController(IStudentService service, AppDbContext db, IParentAccessService parentAccess)
+    public StudentController(
+        IStudentService service,
+        AppDbContext db,
+        IParentAccessService parentAccess,
+        IPdfReportService pdf)
     {
         _service = service;
         _db = db;
         _parentAccess = parentAccess;
+        _pdf = pdf;
     }
 
     /// <summary>
@@ -41,7 +47,7 @@ public class StudentController : ControllerBase
     /// GET /api/students/my-children
     /// </summary>
     [HttpGet("my-children")]
-    [Authorize(Roles = "parent")]
+    [Authorize(Roles = "parent,teacher,staff,admin,principal")]
     public async Task<IActionResult> GetMyChildren()
     {
         var studentIds = await _parentAccess.GetChildStudentIdsAsync(CurrentUserId());
@@ -97,14 +103,59 @@ public class StudentController : ControllerBase
         [FromQuery] int? classId,
         [FromQuery] int? academicYearId,
         [FromQuery] string? search,
+        [FromQuery] bool? isActive,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 25)
-        => Ok(await _service.GetAllAsync(classId, academicYearId, search, page, pageSize));
+        [FromQuery] int pageSize = 25,
+        [FromQuery] bool includeDeleted = false)
+        => Ok(await _service.GetAllAsync(classId, academicYearId, search, isActive, page, pageSize, includeDeleted));
+
+    /// <summary>Export filtered students as .xlsx (same columns as import, plus class/status).</summary>
+    [HttpGet("export")]
+    [Authorize(Roles = "superadmin,admin,principal")]
+    public async Task<IActionResult> Export(
+        [FromQuery] int? classId,
+        [FromQuery] int? academicYearId,
+        [FromQuery] string? search,
+        [FromQuery] bool? isActive)
+    {
+        var bytes = await _service.ExportAsync(classId, academicYearId, search, isActive);
+        var name = $"Students_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
+    }
+
+    /// <summary>Bulk promote students from one class/year into another.</summary>
+    [HttpPost("promote-bulk")]
+    [Authorize(Roles = "admin,principal")]
+    public async Task<IActionResult> PromoteBulk([FromBody] BulkPromoteDto dto)
+    {
+        try
+        {
+            var (promoted, skipped) = await _service.PromoteBulkAsync(dto, CurrentUserId());
+            return Ok(new { promoted, skipped });
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+    }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = "superadmin,admin,principal,teacher")]
+    [Authorize(Roles = "superadmin,admin,principal,teacher,parent,staff")]
     public async Task<IActionResult> GetById(int id)
     {
+        // Parents (and teacher-as-parent) may only open their own linked children.
+        if (User.IsInRole("parent") || User.IsInRole("teacher") || User.IsInRole("staff"))
+        {
+            var isStaffAdminView = User.IsInRole("admin") || User.IsInRole("principal") || User.IsInRole("superadmin");
+            if (!isStaffAdminView)
+            {
+                var isTeacher = User.IsInRole("teacher");
+                var isGuardian = await _parentAccess.IsGuardianOfAsync(CurrentUserId(), id);
+                // Pure parent / staff-parent: must be guardian. Teacher may view any for class work,
+                // OR their own child when linked.
+                if (!isTeacher && !isGuardian)
+                    return Forbid();
+            }
+        }
+
         var dto = await _service.GetByIdAsync(id);
         return dto is null ? NotFound() : Ok(dto);
     }
@@ -113,6 +164,41 @@ public class StudentController : ControllerBase
     [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> GetDocuments(int id)
         => Ok(await _service.GetDocumentsAsync(id));
+
+    [HttpPost("{id:int}/documents")]
+    [Authorize(Roles = "admin,principal")]
+    public async Task<IActionResult> TagDocument(int id, [FromBody] TagStudentDocumentDto dto)
+    {
+        try { return Ok(await _service.TagDocumentAsync(id, dto)); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("{id:int}/transfer")]
+    [Authorize(Roles = "admin,principal")]
+    public async Task<IActionResult> Transfer(int id, [FromBody] TransferStudentDto dto)
+    {
+        try { return Ok(await _service.TransferAsync(id, dto, CurrentUserId())); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+    }
+
+    [HttpPost("{id:int}/guardians/{guardianId:int}/portal")]
+    [Authorize(Roles = "admin,principal")]
+    public async Task<IActionResult> LinkGuardianPortal(int id, int guardianId, [FromBody] GuardianPortalDto dto)
+    {
+        try { return Ok(await _service.LinkGuardianPortalAsync(id, guardianId, dto, CurrentUserId())); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
+    }
+
+    /// <summary>Clear StudentGuardians.UserId (does not delete the parent user account).</summary>
+    [HttpDelete("{id:int}/guardians/{guardianId:int}/portal")]
+    [Authorize(Roles = "admin,principal")]
+    public async Task<IActionResult> UnlinkGuardianPortal(int id, int guardianId)
+    {
+        var ok = await _service.UnlinkGuardianPortalAsync(id, guardianId);
+        return ok ? NoContent() : NotFound();
+    }
 
     /// <summary>
     /// Preview of the admission number the next admission will receive, based
@@ -144,8 +230,41 @@ public class StudentController : ControllerBase
     [Authorize(Roles = "admin,principal")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateStudentDto dto)
     {
-        var ok = await _service.UpdateAsync(id, dto, CurrentUserId());
+        try
+        {
+            var ok = await _service.UpdateAsync(id, dto, CurrentUserId());
+            return ok ? NoContent() : NotFound();
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>Soft-delete a student (hidden from normal lists; enrollments withdrawn).</summary>
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = "admin,principal")]
+    public async Task<IActionResult> SoftDelete(int id)
+    {
+        var ok = await _service.SoftDeleteAsync(id, CurrentUserId());
         return ok ? NoContent() : NotFound();
+    }
+
+    /// <summary>Restore a soft-deleted student (still inactive until re-admit).</summary>
+    [HttpPost("{id:int}/restore")]
+    [Authorize(Roles = "admin,principal")]
+    public async Task<IActionResult> Restore(int id)
+    {
+        var ok = await _service.RestoreAsync(id, CurrentUserId());
+        return ok ? NoContent() : NotFound();
+    }
+
+    /// <summary>Server-rendered student ID card PDF (front + back on one page).</summary>
+    [HttpGet("{id:int}/id-card.pdf")]
+    [Authorize(Roles = "superadmin,admin,principal")]
+    public async Task<IActionResult> IdCardPdf(int id)
+    {
+        var data = await _service.GetIdCardDataAsync(id);
+        if (data is null) return NotFound();
+        var bytes = _pdf.StudentIdCardPdf(data);
+        return File(bytes, "application/pdf", $"student-id-card-{id}.pdf");
     }
 
     /// <summary>
@@ -266,13 +385,20 @@ public class StudentController : ControllerBase
         if (string.IsNullOrWhiteSpace(cnic))
             return Ok(new { siblingCount = 0, siblingOrder = 1, siblings = new List<object>() });
 
-        var normalizedCnic = cnic.Trim();
+        var digits = new string(cnic.Where(char.IsDigit).ToArray());
+        var normalizedCnic = digits.Length >= 5 ? digits : cnic.Trim();
 
-        var siblings = await _db.StudentGuardians
-            .Include(g => g.Student)
-            .Where(g => g.CNIC == normalizedCnic && !g.Student.IsDeleted)
-            .Select(g => new { g.Student.StudentId, g.Student.AdmissionNo, Name = g.Student.FirstName + " " + g.Student.LastName })
-            .Distinct()
+        // Match raw CNIC, digit-only key, or SiblingGroupKey already persisted.
+        var siblings = await _db.Students
+            .AsNoTracking()
+            .Where(s => !s.IsDeleted && (
+                s.SiblingGroupKey == normalizedCnic
+                || s.Guardians.Any(g => !g.IsDeleted && g.CNIC != null
+                    && (g.CNIC == cnic.Trim()
+                        || g.CNIC.Replace("-", "") == normalizedCnic))))
+            .Select(s => new { s.StudentId, s.AdmissionNo, Name = s.FirstName + " " + s.LastName, s.SiblingOrder })
+            .OrderBy(s => s.SiblingOrder ?? 999)
+            .ThenBy(s => s.StudentId)
             .ToListAsync();
 
         return Ok(new

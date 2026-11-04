@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManagement.API.DTOs.Menu;
+using SchoolManagement.API.Helpers;
 using SchoolManagement.API.Services;
 using System.Security.Claims;
 
@@ -28,11 +29,15 @@ public class MenuController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetForCurrentUser()
     {
-        var roleId = GetCurrentRoleId();
-        if (roleId is null)
-            return Forbid();
+        var roleIds = User.GetRoleIds();
+        if (roleIds.Count == 0)
+        {
+            var single = GetCurrentRoleId();
+            if (single is null) return Forbid();
+            roleIds = new[] { single.Value };
+        }
 
-        var tree = await _menu.GetMenuForRoleAsync(roleId.Value);
+        var tree = await _menu.GetMenuForRolesAsync(roleIds);
         return Ok(tree);
     }
 

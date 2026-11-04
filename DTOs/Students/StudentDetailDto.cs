@@ -20,6 +20,8 @@ public class StudentDetailDto
     public bool      IsActive      { get; set; }
     public DateOnly? LeavingDate   { get; set; }
     public string?   LeavingReason { get; set; }
+    public string?  SiblingGroupKey { get; set; }
+    public int?     SiblingOrder    { get; set; }
 
     public int?     CurrentClassId         { get; set; }
     public string?  CurrentClassName       { get; set; }

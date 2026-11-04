@@ -23,11 +23,13 @@ public class UserService : IUserService
 {
     private readonly AppDbContext _db;
     private readonly ITenantContext _tenant;
+    private readonly IGuardianAutoLinkService _autoLink;
 
-    public UserService(AppDbContext db, ITenantContext tenant)
+    public UserService(AppDbContext db, ITenantContext tenant, IGuardianAutoLinkService autoLink)
     {
         _db = db;
         _tenant = tenant;
+        _autoLink = autoLink;
     }
 
     private static UserListDto MapDto(User u, bool includePassword = false) => new()
@@ -99,6 +101,7 @@ public class UserService : IUserService
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
+        await _autoLink.TryLinkUserToGuardiansAsync(user);
 
         return (await GetByIdAsync(user.UserId))!;
     }
@@ -123,6 +126,7 @@ public class UserService : IUserService
         user.UpdatedAt      = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+        await _autoLink.TryLinkUserToGuardiansAsync(user);
         return true;
     }
 
@@ -156,6 +160,7 @@ public class UserService : IUserService
         user.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+        await _autoLink.TryLinkUserToGuardiansAsync(user);
         return MapDto(user, includePassword: false);
     }
 

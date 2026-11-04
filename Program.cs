@@ -89,6 +89,7 @@ builder.Services.AddScoped<JwtHelper>();
 builder.Services.AddScoped<IInstituteMembershipService, InstituteMembershipService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IGuardianAutoLinkService, GuardianAutoLinkService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<ISubjectService, SubjectService>();
@@ -308,6 +309,78 @@ SET IDENTITY_INSERT MenuRolePermissions ON;
 IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE Id = 214)
 INSERT INTO MenuRolePermissions (Id, MenuItemId, RoleId) VALUES (214, 59, 4);
 SET IDENTITY_INSERT MenuRolePermissions OFF;");
+
+    // Add Student (/students/add) — keep visible in Students menu (redirects to New Admission form).
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+UPDATE MenuItems
+SET IsActive = 1, IsDeleted = 0, RouteUrl = N'/students/add', Title = N'Add Student'
+WHERE MenuItemId = 52;");
+
+    // Students menus: SuperAdmin already passes Angular roleGuard on /students/*,
+    // but sidebar hid New Admission / List / Import / Add Student. Align menu with routes.
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 6 AND RoleId = 1)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (6, 1);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 7 AND RoleId = 1)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (7, 1);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 8 AND RoleId = 1)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (8, 1);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 52 AND RoleId = 1)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (52, 1);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 52 AND RoleId = 2)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (52, 2);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 52 AND RoleId = 3)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (52, 3);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 53 AND RoleId = 1)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (53, 1);");
+
+    // Class Teachers — early-grade / full-day class teacher (homeroom).
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH('dbo.Classes', 'ClassTeacherId') IS NULL
+    ALTER TABLE [Classes] ADD [ClassTeacherId] int NULL;
+IF COL_LENGTH('dbo.Classes', 'ClassTeacherId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Classes_Users_ClassTeacherId')
+    ALTER TABLE [Classes] ADD CONSTRAINT [FK_Classes_Users_ClassTeacherId]
+        FOREIGN KEY ([ClassTeacherId]) REFERENCES [Users]([UserId]);
+
+SET IDENTITY_INSERT MenuItems ON;
+IF NOT EXISTS (SELECT 1 FROM MenuItems WHERE MenuItemId = 61)
+INSERT INTO MenuItems (MenuItemId, ParentId, Title, Icon, RouteUrl, SortOrder, IsActive, IsDeleted, CreatedAt, CampusId, InstituteId, CreatedBy, UpdatedAt, UpdatedBy)
+VALUES (61, 3, N'Class Teachers', N'co_present', N'/academics/class-teachers', 35, 1, 0, '2025-01-01', NULL, NULL, NULL, NULL, NULL);
+SET IDENTITY_INSERT MenuItems OFF;
+
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 61 AND RoleId = 1)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (61, 1);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 61 AND RoleId = 2)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (61, 2);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 61 AND RoleId = 3)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (61, 3);");
+
+    // Parent portal: My Children + Student Fees (also surfaces for teacher+parent via menu union).
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+SET IDENTITY_INSERT MenuItems ON;
+IF NOT EXISTS (SELECT 1 FROM MenuItems WHERE MenuItemId = 60)
+INSERT INTO MenuItems (MenuItemId, ParentId, Title, Icon, RouteUrl, SortOrder, IsActive, IsDeleted, CreatedAt, CampusId, InstituteId, CreatedBy, UpdatedAt, UpdatedBy)
+VALUES (60, NULL, N'My Children', N'family_restroom', N'/my-children', 11, 1, 0, '2025-01-01', NULL, NULL, NULL, NULL, NULL);
+SET IDENTITY_INSERT MenuItems OFF;
+
+-- Parent can open Fees group + Student Fees (read own children via API scoping).
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 20 AND RoleId = 5)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (20, 5);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 22 AND RoleId = 5)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (22, 5);
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 60 AND RoleId = 5)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (60, 5);
+-- Teacher+parent also sees My Children via role union (teacher primary + parent claim).
+IF NOT EXISTS (SELECT 1 FROM MenuRolePermissions WHERE MenuItemId = 60 AND RoleId = 4)
+INSERT INTO MenuRolePermissions (MenuItemId, RoleId) VALUES (60, 4);");
+
+    // Sibling grouping columns (discount/order) — additive ensure for local + live.
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH('dbo.Students', 'SiblingGroupKey') IS NULL
+    ALTER TABLE [Students] ADD [SiblingGroupKey] nvarchar(50) NULL;
+IF COL_LENGTH('dbo.Students', 'SiblingOrder') IS NULL
+    ALTER TABLE [Students] ADD [SiblingOrder] int NULL;");
 
     // One-time: orphan (NULL InstituteId) school rows became invisible after admin/teacher
     // login healed Users.InstituteId. Stamp those rows onto the active school tenant.

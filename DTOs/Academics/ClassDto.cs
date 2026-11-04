@@ -13,6 +13,9 @@ public class ClassDto
     public int?    CampusId       { get; set; }
     public string? CampusName     { get; set; }
 
+    public int?    ClassTeacherId   { get; set; }
+    public string? ClassTeacherName { get; set; }
+
     public int    SubjectCount    { get; set; }
     public List<ClassSubjectDto> Subjects { get; set; } = new();
 }

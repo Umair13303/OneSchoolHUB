@@ -89,6 +89,27 @@ public class ClassController : ControllerBase
         catch (ArgumentException ex){ return BadRequest(new { error = ex.Message }); }
     }
 
+    /// <summary>
+    /// Assign (or clear) the class teacher for one class.
+    /// Also points all subjects of that class at the same teacher.
+    /// </summary>
+    [HttpPut("{id:int}/class-teacher")]
+    [Authorize(Roles = "superadmin,admin,principal")]
+    public async Task<IActionResult> SetClassTeacher(int id, [FromBody] AssignClassTeacherDto dto)
+    {
+        try
+        {
+            var result = await _service.SetClassTeacherAsync(id, dto, CurrentUserId());
+            return Ok(result);
+        }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>Classes where this user is the class (homeroom) teacher.</summary>
+    [HttpGet("by-class-teacher/{teacherId:int}")]
+    public async Task<IActionResult> GetByClassTeacher(int teacherId)
+        => Ok(await _service.GetClassesByClassTeacherAsync(teacherId));
+
     /// <summary>Get all class-subject assignments for a specific teacher.</summary>
     [HttpGet("teacher-assignments/{teacherId:int}")]
     public async Task<IActionResult> GetTeacherAssignments(int teacherId)

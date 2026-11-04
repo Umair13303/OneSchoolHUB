@@ -389,6 +389,14 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<HomeworkSubmission>()
             .HasOne(s => s.Student).WithMany().HasForeignKey(s => s.StudentId).OnDelete(DeleteBehavior.Restrict);
 
+        // Class → optional class teacher (homeroom)
+        modelBuilder.Entity<Class>()
+            .HasOne(c => c.ClassTeacher)
+            .WithMany()
+            .HasForeignKey(c => c.ClassTeacherId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // ClassSubject — no cascade
         modelBuilder.Entity<ClassSubject>()
             .HasOne(cs => cs.Class).WithMany(c => c.ClassSubjects).HasForeignKey(cs => cs.ClassId).OnDelete(DeleteBehavior.Restrict);
@@ -617,6 +625,7 @@ public class AppDbContext : DbContext
             new MenuItem { MenuItemId = 5,  ParentId = 3,    Title = "Academic Years",     Icon = "calendar_month", RouteUrl = "/academics/years",     SortOrder = 32, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 24, ParentId = 3,    Title = "Subjects",              Icon = "library_books",  RouteUrl = "/academics/subjects",             SortOrder = 33, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
             new MenuItem { MenuItemId = 27, ParentId = 3,    Title = "Teacher Assignments",   Icon = "assignment_ind", RouteUrl = "/academics/teacher-assignments",  SortOrder = 34, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
+            new MenuItem { MenuItemId = 61, ParentId = 3,    Title = "Class Teachers",        Icon = "co_present",     RouteUrl = "/academics/class-teachers",       SortOrder = 35, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
 
             // Students children
             new MenuItem { MenuItemId = 7,  ParentId = 6,    Title = "New Admission",      Icon = "person_add",     RouteUrl = "/students/new",    SortOrder = 41, IsActive = true, IsDeleted = false, CreatedAt = seedTs },
@@ -681,17 +690,23 @@ public class AppDbContext : DbContext
             new MenuRolePermission { Id = 12, MenuItemId = 4, RoleId = 2 },
             new MenuRolePermission { Id = 14, MenuItemId = 5, RoleId = 2 },
 
-            // Students (6,7,52,53,8) → Admin, Principal
-            new MenuRolePermission { Id = 16, MenuItemId = 6,  RoleId = 2 },
-            new MenuRolePermission { Id = 17, MenuItemId = 6,  RoleId = 3 },
-            new MenuRolePermission { Id = 19, MenuItemId = 7,  RoleId = 2 },
-            new MenuRolePermission { Id = 20, MenuItemId = 7,  RoleId = 3 },
+            // Students (6,7,52,53,8) → SuperAdmin, Admin, Principal
+            // (matches Angular roleGuard on /students/*)
+            new MenuRolePermission { Id = 215, MenuItemId = 6,  RoleId = 1 },
+            new MenuRolePermission { Id = 16,  MenuItemId = 6,  RoleId = 2 },
+            new MenuRolePermission { Id = 17,  MenuItemId = 6,  RoleId = 3 },
+            new MenuRolePermission { Id = 216, MenuItemId = 7,  RoleId = 1 },
+            new MenuRolePermission { Id = 19,  MenuItemId = 7,  RoleId = 2 },
+            new MenuRolePermission { Id = 20,  MenuItemId = 7,  RoleId = 3 },
+            new MenuRolePermission { Id = 219, MenuItemId = 52, RoleId = 1 },
             new MenuRolePermission { Id = 141, MenuItemId = 52, RoleId = 2 },
             new MenuRolePermission { Id = 142, MenuItemId = 52, RoleId = 3 },
+            new MenuRolePermission { Id = 217, MenuItemId = 53, RoleId = 1 },
             new MenuRolePermission { Id = 201, MenuItemId = 53, RoleId = 2 },
             new MenuRolePermission { Id = 202, MenuItemId = 53, RoleId = 3 },
-            new MenuRolePermission { Id = 22, MenuItemId = 8,  RoleId = 2 },
-            new MenuRolePermission { Id = 23, MenuItemId = 8,  RoleId = 3 },
+            new MenuRolePermission { Id = 218, MenuItemId = 8,  RoleId = 1 },
+            new MenuRolePermission { Id = 22,  MenuItemId = 8,  RoleId = 2 },
+            new MenuRolePermission { Id = 23,  MenuItemId = 8,  RoleId = 3 },
 
             // Timetable group (9) → everyone except Staff
             new MenuRolePermission { Id = 25, MenuItemId = 9, RoleId = 2 },
@@ -749,6 +764,10 @@ public class AppDbContext : DbContext
             // Menu Management (19) → SuperAdmin only
             new MenuRolePermission { Id = 78, MenuItemId = 24, RoleId = 2 },
             new MenuRolePermission { Id = 85, MenuItemId = 27, RoleId = 2 },
+            // Class Teachers (61) → SuperAdmin, Admin, Principal
+            new MenuRolePermission { Id = 220, MenuItemId = 61, RoleId = 1 },
+            new MenuRolePermission { Id = 221, MenuItemId = 61, RoleId = 2 },
+            new MenuRolePermission { Id = 222, MenuItemId = 61, RoleId = 3 },
             new MenuRolePermission { Id = 80, MenuItemId = 25, RoleId = 2 },
             new MenuRolePermission { Id = 81, MenuItemId = 25, RoleId = 3 },
 

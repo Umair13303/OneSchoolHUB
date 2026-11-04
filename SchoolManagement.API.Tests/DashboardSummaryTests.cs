@@ -131,7 +131,7 @@ public class DashboardSummaryTests : IDisposable
     [Fact]
     public async Task Summary_Matches_PageSize0_ClientMath()
     {
-        var roster = await _students.GetAllAsync(null, null, null, 1, 0);
+        var roster = await _students.GetAllAsync(null, null, null, null, 1, 0);
         var items = roster.Items;
 
         var total = items.Count;
