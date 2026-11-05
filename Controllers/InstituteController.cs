@@ -16,12 +16,24 @@ public class InstituteController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IWebHostEnvironment _env;
     private readonly ITenantContext _tenant;
+    private readonly IHttpClientFactory _httpFactory;
+    private readonly IConfiguration _config;
+    private readonly ILogger<InstituteController> _logger;
 
-    public InstituteController(AppDbContext db, IWebHostEnvironment env, ITenantContext tenant)
+    public InstituteController(
+        AppDbContext db,
+        IWebHostEnvironment env,
+        ITenantContext tenant,
+        IHttpClientFactory httpFactory,
+        IConfiguration config,
+        ILogger<InstituteController> logger)
     {
         _db = db;
         _env = env;
         _tenant = tenant;
+        _httpFactory = httpFactory;
+        _config = config;
+        _logger = logger;
     }
 
     // Any authenticated user can call this to get their own institute's name + logo.
@@ -196,61 +208,102 @@ public class InstituteController : ControllerBase
     }
 
     [HttpPost("{id}/logo")]
-    public async Task<IActionResult> UploadLogo(int id, IFormFile file)
+    public async Task<IActionResult> UploadLogo(int id, IFormFile file, CancellationToken ct)
     {
-        var institute = await _db.Institutes.FindAsync(id);
+        var institute = await _db.Institutes.FindAsync(new object[] { id }, ct);
         if (institute == null) return NotFound();
 
         if (file == null || file.Length == 0)
             return BadRequest("No file provided.");
 
-        var ext = Path.GetExtension(file.FileName).ToLower();
-        if (ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp")
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp"))
             return BadRequest("Only image files are allowed.");
 
-        var uploadsDir = Path.Combine(_env.WebRootPath ?? "wwwroot", "logos");
-        Directory.CreateDirectory(uploadsDir);
+        // Persist on FileServer — Hub wwwroot logos are wiped by FTP clean-slate deploys.
+        var uploaded = await UploadImageToFileServerAsync(file, "image", id, institute.Name, ct);
+        if (uploaded is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "FileServer is not configured or upload failed." });
 
-        var fileName = $"institute_{id}_{Guid.NewGuid()}{ext}";
-        var filePath = Path.Combine(uploadsDir, fileName);
-
-        using (var stream = new FileStream(filePath, FileMode.Create))
-            await file.CopyToAsync(stream);
-
-        institute.LogoUrl   = $"/logos/{fileName}";
+        institute.LogoUrl   = $"/api/files/{uploaded.Value}";
         institute.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ct);
 
         return Ok(new { logoUrl = institute.LogoUrl });
     }
 
     [HttpPost("{id}/stamp")]
-    public async Task<IActionResult> UploadStamp(int id, IFormFile file)
+    public async Task<IActionResult> UploadStamp(int id, IFormFile file, CancellationToken ct)
     {
-        var institute = await _db.Institutes.FindAsync(id);
+        var institute = await _db.Institutes.FindAsync(new object[] { id }, ct);
         if (institute == null) return NotFound();
 
         if (file == null || file.Length == 0)
             return BadRequest("No file provided.");
 
-        var ext = Path.GetExtension(file.FileName).ToLower();
-        if (ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp")
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp"))
             return BadRequest("Only image files are allowed.");
 
-        var uploadsDir = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads", "stamps");
-        Directory.CreateDirectory(uploadsDir);
+        var uploaded = await UploadImageToFileServerAsync(file, "image", id, institute.Name, ct);
+        if (uploaded is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "FileServer is not configured or upload failed." });
 
-        var fileName = $"stamp_{id}_{Guid.NewGuid()}{ext}";
-        var filePath = Path.Combine(uploadsDir, fileName);
-
-        using (var stream = new FileStream(filePath, FileMode.Create))
-            await file.CopyToAsync(stream);
-
-        institute.SchoolStampUrl = $"/uploads/stamps/{fileName}";
+        institute.SchoolStampUrl = $"/api/files/{uploaded.Value}";
         institute.UpdatedAt      = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ct);
 
         return Ok(new { schoolStampUrl = institute.SchoolStampUrl });
+    }
+
+    /// <summary>Upload an image to FileServer; returns fileId or null on failure.</summary>
+    private async Task<int?> UploadImageToFileServerAsync(
+        IFormFile file,
+        string entityType,
+        int entityId,
+        string? schoolName,
+        CancellationToken ct)
+    {
+        var baseUrl = (_config["FileServer:BaseUrl"] ?? string.Empty).TrimEnd('/');
+        var apiKey  = _config["FileServer:ApiKey"] ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(apiKey))
+            return null;
+
+        var client = _httpFactory.CreateClient("FileServer");
+        client.DefaultRequestHeaders.Remove("X-Api-Key");
+        client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+
+        using var form = new MultipartFormDataContent();
+        var streamContent = new StreamContent(file.OpenReadStream());
+        if (!string.IsNullOrWhiteSpace(file.ContentType))
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+        form.Add(streamContent, "file", file.FileName);
+        form.Add(new StringContent(entityType), "entityType");
+        form.Add(new StringContent(entityId.ToString()), "entityId");
+        if (!string.IsNullOrWhiteSpace(schoolName))
+            form.Add(new StringContent(schoolName), "schoolName");
+
+        using var res = await client.PostAsync($"{baseUrl}/api/files/upload", form, ct);
+        var body = await res.Content.ReadAsStringAsync(ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Institute image upload failed ({EntityType}): {Status} {Body}",
+                entityType, (int)res.StatusCode, body);
+            return null;
+        }
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("fileId", out var idEl) && idEl.TryGetInt32(out var fileId))
+                return fileId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not parse FileServer upload response for {EntityType}", entityType);
+        }
+
+        return null;
     }
 
     [HttpPost("{id}/admin")]

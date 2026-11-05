@@ -66,7 +66,9 @@ jobs:
           protocol: ftps
           local-dir: ./publish-out/
           server-dir: /wwwroot/
-          dangerous-clean-slate: true
+          # false: keep server-only uploads (legacy /logos, /uploads) across deploys.
+          # New logos/stamps go to FileServer; clean-slate was wiping Hub wwwroot logos.
+          dangerous-clean-slate: false
 
       - name: Start site after FTP (remove app_offline.htm)
         if: always()
