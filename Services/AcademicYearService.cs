@@ -22,9 +22,6 @@ public class AcademicYearService : IAcademicYearService
 
     public AcademicYearService(AppDbContext db) => _db = db;
 
-    // AppDbContext does not register a HasQueryFilter for AcademicYear, so we
-    // filter IsDeleted manually in every read.
-
     public async Task<List<AcademicYearDto>> GetAllAsync()
         => await _db.AcademicYears
             .AsNoTracking()
@@ -51,6 +48,7 @@ public class AcademicYearService : IAcademicYearService
     public async Task<AcademicYearDto> CreateAsync(CreateAcademicYearDto dto, int createdBy)
     {
         ValidateDates(dto.StartDate, dto.EndDate);
+        await EnsureNoOverlapAsync(dto.StartDate, dto.EndDate, excludeId: null);
 
         var labelExists = await _db.AcademicYears
             .AnyAsync(y => y.YearLabel == dto.YearLabel && !y.IsDeleted);
@@ -82,16 +80,26 @@ public class AcademicYearService : IAcademicYearService
         var entity = await _db.AcademicYears.FirstOrDefaultAsync(y => y.AcademicYearId == id && !y.IsDeleted);
         if (entity is null) return false;
 
+        await EnsureNoOverlapAsync(dto.StartDate, dto.EndDate, excludeId: id);
+
         var labelClash = await _db.AcademicYears
             .AnyAsync(y => y.YearLabel == dto.YearLabel && y.AcademicYearId != id && !y.IsDeleted);
         if (labelClash)
             throw new InvalidOperationException($"Another academic year already uses the label '{dto.YearLabel}'.");
 
+        // Do not leave the school with zero active years.
+        if (entity.IsActive && !dto.IsActive)
+        {
+            var otherActive = await _db.AcademicYears
+                .AnyAsync(y => y.IsActive && !y.IsDeleted && y.AcademicYearId != id);
+            if (!otherActive)
+                throw new InvalidOperationException("Cannot deactivate the only active academic year. Activate another year first.");
+        }
+
         entity.YearLabel = dto.YearLabel;
         entity.StartDate = dto.StartDate;
         entity.EndDate   = dto.EndDate;
 
-        // If the caller flipped IsActive from false→true, deactivate others.
         if (dto.IsActive && !entity.IsActive)
             await DeactivateOthersAsync();
         entity.IsActive  = dto.IsActive;
@@ -122,6 +130,22 @@ public class AcademicYearService : IAcademicYearService
         var entity = await _db.AcademicYears.FirstOrDefaultAsync(y => y.AcademicYearId == id && !y.IsDeleted);
         if (entity is null) return false;
 
+        if (entity.IsActive)
+        {
+            var otherActive = await _db.AcademicYears
+                .AnyAsync(y => y.IsActive && !y.IsDeleted && y.AcademicYearId != id);
+            if (!otherActive)
+                throw new InvalidOperationException("Cannot delete the only active academic year. Activate another year first.");
+        }
+
+        var inUse =
+            await _db.StudentClassEnrollments.AnyAsync(e => e.AcademicYearId == id) ||
+            await _db.SchoolTimetables.AnyAsync(t => t.AcademicYearId == id && !t.IsDeleted) ||
+            await _db.AcademicCalendarEvents.AnyAsync(e => e.AcademicYearId == id && !e.IsDeleted) ||
+            await _db.CoursePlans.AnyAsync(p => p.AcademicYearId == id && !p.IsDeleted);
+
+        if (inUse)
+            throw new InvalidOperationException("Cannot delete an academic year that has enrollments, timetable, calendar events, or course plans.");
 
         entity.IsDeleted = true;
         entity.IsActive  = false;
@@ -131,12 +155,22 @@ public class AcademicYearService : IAcademicYearService
         return true;
     }
 
-    // ──────────────────────────────────────────────────────────────────────
     private async Task DeactivateOthersAsync()
     {
         await _db.AcademicYears
-            .Where(y => y.IsActive)
+            .Where(y => y.IsActive && !y.IsDeleted)
             .ExecuteUpdateAsync(s => s.SetProperty(y => y.IsActive, false));
+    }
+
+    private async Task EnsureNoOverlapAsync(DateOnly start, DateOnly end, int? excludeId)
+    {
+        var overlap = await _db.AcademicYears.AnyAsync(y =>
+            !y.IsDeleted &&
+            (!excludeId.HasValue || y.AcademicYearId != excludeId.Value) &&
+            y.StartDate <= end &&
+            y.EndDate >= start);
+        if (overlap)
+            throw new InvalidOperationException("Academic year dates overlap an existing year.");
     }
 
     private static void ValidateDates(DateOnly start, DateOnly end)

@@ -19,7 +19,7 @@ public class CalendarEventTypeController : ControllerBase
     public async Task<IActionResult> GetAll() => Ok(await _svc.GetAllAsync());
 
     [HttpPost]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Create([FromBody] CreateCalendarEventTypeDto dto)
     {
         try
@@ -31,7 +31,7 @@ public class CalendarEventTypeController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Update(int id, [FromBody] CreateCalendarEventTypeDto dto)
     {
         try
@@ -43,7 +43,7 @@ public class CalendarEventTypeController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Delete(int id)
     {
         try

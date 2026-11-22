@@ -20,7 +20,7 @@ public class CalendarEventController : ControllerBase
         => Ok(await _svc.GetByYearAsync(yearId));
 
     [HttpPost]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Create(int yearId, [FromBody] CreateCalendarEventDto dto)
     {
         try
@@ -33,22 +33,23 @@ public class CalendarEventController : ControllerBase
     }
 
     [HttpPut("{eventId:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Update(int yearId, int eventId, [FromBody] UpdateCalendarEventDto dto)
     {
         try
         {
-            var ok = await _svc.UpdateAsync(eventId, dto, CurrentUserId());
+            var ok = await _svc.UpdateAsync(yearId, eventId, dto, CurrentUserId());
             return ok ? NoContent() : NotFound();
         }
+        catch (KeyNotFoundException ex) { return NotFound(new { error = ex.Message }); }
         catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpDelete("{eventId:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Delete(int yearId, int eventId)
     {
-        var ok = await _svc.DeleteAsync(eventId, CurrentUserId());
+        var ok = await _svc.DeleteAsync(yearId, eventId, CurrentUserId());
         return ok ? NoContent() : NotFound();
     }
 

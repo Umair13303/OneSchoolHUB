@@ -21,9 +21,9 @@ public class ClassController : ControllerBase
 
     public ClassController(IClassService service) => _service = service;
 
-    /// <summary>List classes. Optionally filter by academic year.</summary>
+    /// <summary>List classes. Classes are year-independent; academicYearId is ignored if passed.</summary>
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int? academicYearId)
+    public async Task<IActionResult> GetAll([FromQuery] int? academicYearId = null)
         => Ok(await _service.GetAllAsync(academicYearId));
 
     [HttpGet("{id:int}")]
@@ -39,7 +39,7 @@ public class ClassController : ControllerBase
         => Ok(await _service.GetSubjectsForClassAsync(id));
 
     [HttpPost]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Create([FromBody] CreateClassDto dto)
     {
         try
@@ -52,7 +52,7 @@ public class ClassController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateClassDto dto)
     {
         try
@@ -65,7 +65,7 @@ public class ClassController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Delete(int id)
     {
         try
@@ -76,9 +76,9 @@ public class ClassController : ControllerBase
         catch (InvalidOperationException ex){ return Conflict(new { error = ex.Message }); }
     }
 
-    /// <summary>Assign (or replace) the teacher for one subject in this class.</summary>
+    /// <summary>Assign (or replace) the teacher for one subject in this class. Conflicts return 409 unless ReplaceExisting is true.</summary>
     [HttpPost("{id:int}/assign-teacher")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> AssignTeacher(int id, [FromBody] AssignTeacherDto dto)
     {
         try
@@ -87,11 +87,12 @@ public class ClassController : ControllerBase
             return Ok(result);
         }
         catch (ArgumentException ex){ return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex){ return Conflict(new { error = ex.Message, code = "TEACHER_CONFLICT" }); }
     }
 
     /// <summary>
-    /// Assign (or clear) the class teacher for one class.
-    /// Also points all subjects of that class at the same teacher.
+    /// Assign (or clear) the class (homeroom) teacher for one class.
+    /// Fills only subjects that have no teacher yet; does not overwrite specialist assignments.
     /// </summary>
     [HttpPut("{id:int}/class-teacher")]
     [Authorize(Roles = "superadmin,admin,principal")]
@@ -117,16 +118,20 @@ public class ClassController : ControllerBase
 
     /// <summary>Remove a subject from a class.</summary>
     [HttpDelete("{id:int}/subjects/{classSubjectId:int}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> RemoveSubject(int id, int classSubjectId)
     {
-        var ok = await _service.RemoveSubjectAsync(id, classSubjectId, CurrentUserId());
-        return ok ? NoContent() : NotFound();
+        try
+        {
+            var ok = await _service.RemoveSubjectAsync(id, classSubjectId, CurrentUserId());
+            return ok ? NoContent() : NotFound();
+        }
+        catch (InvalidOperationException ex) { return Conflict(new { error = ex.Message }); }
     }
 
     /// <summary>Remove teacher from a class subject (keep the subject, just unassign teacher).</summary>
     [HttpPatch("{id:int}/subjects/{classSubjectId:int}/unassign-teacher")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> UnassignTeacher(int id, int classSubjectId)
     {
         var result = await _service.UnassignTeacherAsync(id, classSubjectId, CurrentUserId());
@@ -135,7 +140,7 @@ public class ClassController : ControllerBase
 
     /// <summary>Toggle active/inactive for a class subject.</summary>
     [HttpPatch("{id:int}/subjects/{classSubjectId:int}/toggle-status")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> ToggleSubjectStatus(int id, int classSubjectId)
     {
         var result = await _service.ToggleSubjectStatusAsync(id, classSubjectId, CurrentUserId());

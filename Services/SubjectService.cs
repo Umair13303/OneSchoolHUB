@@ -43,10 +43,6 @@ public class SubjectService : ISubjectService
 
     public async Task<SubjectDto> CreateAsync(CreateSubjectDto dto, int createdBy)
     {
-        var exists = await _db.Subjects.AnyAsync(s => s.SubjectName == dto.SubjectName);
-        if (exists)
-            throw new InvalidOperationException($"A subject named '{dto.SubjectName}' already exists.");
-
         int? instituteId = null;
         if (_tenant.IsSuperAdmin)
         {
@@ -57,12 +53,26 @@ public class SubjectService : ISubjectService
                 throw new ArgumentException($"Institute {dto.InstituteId} does not exist.");
             instituteId = dto.InstituteId;
         }
+        else
+        {
+            instituteId = _tenant.InstituteId;
+        }
+
+        int? campusId = _tenant.IsSuperAdmin ? null : _tenant.CampusId;
+
+        var exists = await _db.Subjects.AnyAsync(s =>
+            s.SubjectName == dto.SubjectName &&
+            s.InstituteId == instituteId &&
+            s.CampusId == campusId);
+        if (exists)
+            throw new InvalidOperationException($"A subject named '{dto.SubjectName}' already exists.");
 
         var entity = new Subject
         {
             SubjectName = dto.SubjectName,
             IsActive    = dto.IsActive,
             InstituteId = instituteId,
+            CampusId    = campusId,
             CreatedBy   = createdBy
         };
         _db.Subjects.Add(entity);
@@ -77,15 +87,6 @@ public class SubjectService : ISubjectService
         var entity = await _db.Subjects.FirstOrDefaultAsync(s => s.SubjectId == id);
         if (entity is null) return false;
 
-        var clash = await _db.Subjects.AnyAsync(s => s.SubjectName == dto.SubjectName && s.SubjectId != id);
-        if (clash)
-            throw new InvalidOperationException($"Another subject already uses the name '{dto.SubjectName}'.");
-
-        entity.SubjectName = dto.SubjectName;
-        entity.IsActive    = dto.IsActive;
-        entity.UpdatedBy   = updatedBy;
-        entity.UpdatedAt   = DateTime.UtcNow;
-
         if (_tenant.IsSuperAdmin && dto.InstituteId.HasValue)
         {
             var instituteExists = await _db.Institutes.AnyAsync(i => i.InstituteId == dto.InstituteId.Value);
@@ -93,6 +94,26 @@ public class SubjectService : ISubjectService
                 throw new ArgumentException($"Institute {dto.InstituteId} does not exist.");
             entity.InstituteId = dto.InstituteId;
         }
+
+        var clash = await _db.Subjects.AnyAsync(s =>
+            s.SubjectName == dto.SubjectName &&
+            s.InstituteId == entity.InstituteId &&
+            s.CampusId == entity.CampusId &&
+            s.SubjectId != id);
+        if (clash)
+            throw new InvalidOperationException($"Another subject already uses the name '{dto.SubjectName}'.");
+
+        if (entity.IsActive && !dto.IsActive)
+        {
+            var assigned = await _db.ClassSubjects.AnyAsync(cs => cs.SubjectId == id && cs.IsActive);
+            if (assigned)
+                throw new InvalidOperationException("Cannot deactivate a subject that is still assigned to active class subjects.");
+        }
+
+        entity.SubjectName = dto.SubjectName;
+        entity.IsActive    = dto.IsActive;
+        entity.UpdatedBy   = updatedBy;
+        entity.UpdatedAt   = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
         return true;
@@ -106,6 +127,10 @@ public class SubjectService : ISubjectService
         var inUse = await _db.ClassSubjects.AnyAsync(cs => cs.SubjectId == id);
         if (inUse)
             throw new InvalidOperationException("Cannot delete a subject that is assigned to one or more classes.");
+
+        var inTimetable = await _db.SchoolTimetables.AnyAsync(t => t.SubjectId == id && !t.IsDeleted);
+        if (inTimetable)
+            throw new InvalidOperationException("Cannot delete a subject that is used in the timetable.");
 
         entity.IsDeleted = true;
         entity.IsActive  = false;

@@ -31,6 +31,9 @@ public class ClassService : IClassService
 
     public async Task<List<ClassDto>> GetAllAsync(int? academicYearId)
     {
+        // Classes are year-independent. academicYearId is accepted for API compat and ignored.
+        _ = academicYearId;
+
         var classes = await _db.Classes
             .AsNoTracking()
             .Include(c => c.ClassTeacher)
@@ -62,12 +65,6 @@ public class ClassService : IClassService
 
     public async Task<ClassDto> CreateAsync(CreateClassDto dto, int createdBy)
     {
-        var dupe = await _db.Classes.AnyAsync(c =>
-            c.ClassName == dto.ClassName &&
-            c.Section   == dto.Section);
-        if (dupe)
-            throw new InvalidOperationException("A class with the same name + section already exists.");
-
         int? instituteId = null;
         if (_tenant.IsSuperAdmin)
         {
@@ -78,6 +75,21 @@ public class ClassService : IClassService
                 throw new ArgumentException($"Institute {dto.InstituteId} does not exist.");
             instituteId = dto.InstituteId;
         }
+        else
+        {
+            instituteId = _tenant.InstituteId;
+        }
+
+        int? campusId = _tenant.IsSuperAdmin ? null : _tenant.CampusId;
+
+        var sectionKey = dto.Section ?? "";
+        var dupe = await _db.Classes.AnyAsync(c =>
+            c.ClassName == dto.ClassName &&
+            (c.Section ?? "") == sectionKey &&
+            c.InstituteId == instituteId &&
+            c.CampusId == campusId);
+        if (dupe)
+            throw new InvalidOperationException("A class with the same name + section already exists.");
 
         var entity = new Class
         {
@@ -85,6 +97,7 @@ public class ClassService : IClassService
             Section     = dto.Section,
             IsActive    = dto.IsActive,
             InstituteId = instituteId,
+            CampusId    = campusId,
             CreatedBy   = createdBy
         };
         _db.Classes.Add(entity);
@@ -98,19 +111,6 @@ public class ClassService : IClassService
         var entity = await _db.Classes.FirstOrDefaultAsync(c => c.ClassId == id);
         if (entity is null) return false;
 
-        var dupe = await _db.Classes.AnyAsync(c =>
-            c.ClassName == dto.ClassName &&
-            c.Section   == dto.Section &&
-            c.ClassId   != id);
-        if (dupe)
-            throw new InvalidOperationException("Another class with the same name + section already exists.");
-
-        entity.ClassName = dto.ClassName;
-        entity.Section   = dto.Section;
-        entity.IsActive  = dto.IsActive;
-        entity.UpdatedBy = updatedBy;
-        entity.UpdatedAt = DateTime.UtcNow;
-
         if (_tenant.IsSuperAdmin && dto.InstituteId.HasValue)
         {
             var instituteExists = await _db.Institutes.AnyAsync(i => i.InstituteId == dto.InstituteId.Value);
@@ -118,6 +118,30 @@ public class ClassService : IClassService
                 throw new ArgumentException($"Institute {dto.InstituteId} does not exist.");
             entity.InstituteId = dto.InstituteId;
         }
+
+        var sectionKey = dto.Section ?? "";
+        var dupe = await _db.Classes.AnyAsync(c =>
+            c.ClassName == dto.ClassName &&
+            (c.Section ?? "") == sectionKey &&
+            c.InstituteId == entity.InstituteId &&
+            c.CampusId == entity.CampusId &&
+            c.ClassId != id);
+        if (dupe)
+            throw new InvalidOperationException("Another class with the same name + section already exists.");
+
+        if (entity.IsActive && !dto.IsActive)
+        {
+            var hasActiveEnrollments = await _db.StudentClassEnrollments
+                .AnyAsync(e => e.ClassId == id && e.Status == "Active");
+            if (hasActiveEnrollments)
+                throw new InvalidOperationException("Cannot deactivate a class that still has active student enrollments.");
+        }
+
+        entity.ClassName = dto.ClassName;
+        entity.Section   = dto.Section;
+        entity.IsActive  = dto.IsActive;
+        entity.UpdatedBy = updatedBy;
+        entity.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
         return true;
@@ -131,6 +155,14 @@ public class ClassService : IClassService
         var hasEnrollments = await _db.StudentClassEnrollments.AnyAsync(e => e.ClassId == id);
         if (hasEnrollments)
             throw new InvalidOperationException("Cannot delete a class that has student enrollments.");
+
+        var hasTimetable = await _db.SchoolTimetables.AnyAsync(t => t.ClassId == id && !t.IsDeleted);
+        if (hasTimetable)
+            throw new InvalidOperationException("Cannot delete a class that has timetable entries. Remove timetable first.");
+
+        var hasCoursePlans = await _db.CoursePlans.AnyAsync(p => p.ClassId == id && !p.IsDeleted);
+        if (hasCoursePlans)
+            throw new InvalidOperationException("Cannot delete a class that has course plans.");
 
         entity.IsDeleted = true;
         entity.IsActive  = false;
@@ -161,8 +193,9 @@ public class ClassService : IClassService
                 throw new ArgumentException($"User {dto.TeacherId} is not a teacher (role: {teacher.Role.RoleName}).");
         }
 
-        // Upsert the (Class, Subject) tuple — replace the teacher if one was already assigned.
+        // Upsert the (Class, Subject) tuple.
         var existing = await _db.ClassSubjects
+            .Include(cs => cs.Teacher)
             .FirstOrDefaultAsync(cs => cs.ClassId == classId && cs.SubjectId == dto.SubjectId);
 
         // Prefer explicit teacher; else inherit class teacher for early-grade full-day classes.
@@ -184,6 +217,21 @@ public class ClassService : IClassService
         }
         else
         {
+            var currentTeacherId = existing.TeacherId.HasValue && existing.TeacherId.Value > 0
+                ? existing.TeacherId
+                : null;
+            var replacing =
+                teacherId.HasValue &&
+                currentTeacherId.HasValue &&
+                currentTeacherId.Value != teacherId.Value;
+
+            if (replacing && !dto.ReplaceExisting)
+            {
+                var currentName = existing.Teacher?.FullName ?? $"#{currentTeacherId}";
+                throw new InvalidOperationException(
+                    $"Subject is already assigned to {currentName}. Confirm replace to continue.");
+            }
+
             if (teacherId.HasValue) existing.TeacherId = teacherId;
             existing.IsActive  = true;
             existing.UpdatedBy = createdBy;
@@ -239,6 +287,17 @@ public class ClassService : IClassService
         var cs = await _db.ClassSubjects
             .FirstOrDefaultAsync(x => x.Id == classSubjectId && x.ClassId == classId);
         if (cs is null) return false;
+
+        var inTimetable = await _db.SchoolTimetables.AnyAsync(t =>
+            t.ClassId == classId && t.SubjectId == cs.SubjectId && !t.IsDeleted);
+        if (inTimetable)
+            throw new InvalidOperationException("Cannot remove a subject that is used in the timetable. Clear timetable entries first.");
+
+        var inPlans = await _db.CoursePlans.AnyAsync(p =>
+            p.ClassId == classId && p.SubjectId == cs.SubjectId && !p.IsDeleted);
+        if (inPlans)
+            throw new InvalidOperationException("Cannot remove a subject that has course plans for this class.");
+
         _db.ClassSubjects.Remove(cs);
         await _db.SaveChangesAsync();
         return true;
@@ -317,9 +376,9 @@ public class ClassService : IClassService
     }
 
     /// <summary>
-    /// Sets the class teacher for one class only. When a teacher is assigned,
-    /// every existing ClassSubject on that class is pointed at the same teacher
-    /// so Classroom Today / attendance / curriculum keep working for a full-day teacher.
+    /// Sets the class (homeroom) teacher. Fills only ClassSubject rows with no teacher;
+    /// does not overwrite specialist subject teachers. Clearing the class teacher leaves
+    /// existing subject teachers unchanged.
     /// </summary>
     public async Task<ClassDto> SetClassTeacherAsync(int classId, AssignClassTeacherDto dto, int updatedBy)
     {
@@ -345,6 +404,9 @@ public class ClassService : IClassService
 
             foreach (var cs in entity.ClassSubjects)
             {
+                if (cs.TeacherId.HasValue && cs.TeacherId.Value > 0)
+                    continue;
+
                 cs.TeacherId = teacherId;
                 cs.IsActive  = true;
                 cs.UpdatedBy = updatedBy;

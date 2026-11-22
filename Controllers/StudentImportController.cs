@@ -149,6 +149,8 @@ public class StudentImportController : ControllerBase
 
         var createdBy = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : 0;
         var results   = new List<ImportRowResult>();
+        // Prevent duplicates within the same uploaded sheet.
+        var seenInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         for (int r = 2; r <= ws.Dimension.Rows; r++)
         {
@@ -215,6 +217,31 @@ public class StudentImportController : ControllerBase
                 ]
             };
 
+            var fileKey = $"{firstName}|{lastName}|{guardianPhone}|{Cell(16)}|{customAdmNo}";
+            if (!seenInFile.Add(fileKey))
+            {
+                rowResult.Success = false;
+                rowResult.Skipped = true;
+                rowResult.Error   = "Skipped: duplicate row in this Excel file.";
+                results.Add(rowResult);
+                continue;
+            }
+
+            // Soft duplicate vs DB (name+guardian, admission no) including same class.
+            var dup = await _studentSvc.FindDuplicateAsync(dto, classId, academicYearId);
+            if (dup is not null)
+            {
+                rowResult.Success     = false;
+                rowResult.Skipped     = true;
+                rowResult.AdmissionNo = dup.AdmissionNo;
+                rowResult.Error = dup.AlreadyInClass
+                    ? $"Skipped: already in this class ({dup.AdmissionNo})."
+                    : $"Skipped: already exists as {dup.AdmissionNo}" +
+                      (dup.CurrentClass is null ? "." : $" (in {dup.CurrentClass}).");
+                results.Add(rowResult);
+                continue;
+            }
+
             try
             {
                 var created = await _studentSvc.CreateAdmissionAsync(dto, createdBy);
@@ -234,7 +261,8 @@ public class StudentImportController : ControllerBase
         {
             totalRows    = results.Count,
             successCount = results.Count(x => x.Success),
-            failCount    = results.Count(x => !x.Success),
+            skipCount    = results.Count(x => x.Skipped),
+            failCount    = results.Count(x => !x.Success && !x.Skipped),
             results
         });
     }
@@ -258,6 +286,7 @@ public class ImportRowResult
     public int    Row         { get; set; }
     public string Name        { get; set; } = "";
     public bool   Success     { get; set; }
+    public bool   Skipped     { get; set; }
     public string? AdmissionNo { get; set; }
     public string? Error       { get; set; }
 }

@@ -15,6 +15,11 @@ public interface IStudentService
 {
     Task<PagedResultDto<StudentListDto>> GetAllAsync(int? classId, int? academicYearId, string? search, bool? isActive, int page, int pageSize, bool includeDeleted = false);
     Task<StudentDetailDto?>    GetByIdAsync(int id);
+    /// <summary>
+    /// Finds an existing student that would collide with this admission
+    /// (admission no, or name + guardian CNIC/phone/name). Optionally scoped to a class+year.
+    /// </summary>
+    Task<DuplicateStudentHit?> FindDuplicateAsync(CreateStudentAdmissionDto dto, int? classId = null, int? academicYearId = null);
     Task<StudentDetailDto>     CreateAdmissionAsync(CreateStudentAdmissionDto dto, int createdBy);
     Task<bool>                 UpdateAsync(int id, UpdateStudentDto dto, int updatedBy);
     Task<List<StudentDocumentDto>> GetDocumentsAsync(int studentId);
@@ -237,6 +242,104 @@ public class StudentService : IStudentService
         };
     }
 
+    // ── Duplicate detection (import + manual admission) ───────────────────
+    public async Task<DuplicateStudentHit?> FindDuplicateAsync(
+        CreateStudentAdmissionDto dto, int? classId = null, int? academicYearId = null)
+    {
+        var first = (dto.FirstName ?? "").Trim();
+        var last  = (dto.LastName ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(last))
+            return null;
+
+        var targetClassId = classId ?? dto.ClassId;
+        var targetYearId  = academicYearId ?? dto.AcademicYearId;
+
+        // 1) Explicit admission number
+        if (!string.IsNullOrWhiteSpace(dto.CustomAdmissionNo))
+        {
+            var byAdm = await _db.Students.AsNoTracking()
+                .Include(s => s.Enrollments).ThenInclude(e => e.Class)
+                .FirstOrDefaultAsync(s => s.AdmissionNo == dto.CustomAdmissionNo.Trim() && !s.IsDeleted);
+            if (byAdm is not null)
+                return ToHit(byAdm, targetClassId, targetYearId, "admission number");
+        }
+
+        var guardian = dto.Guardians?.FirstOrDefault();
+        var cnicDigits  = DigitsOnly(guardian?.CNIC);
+        var phoneDigits = DigitsOnly(guardian?.Phone);
+        var fatherName  = (guardian?.FullName ?? "").Trim().ToLowerInvariant();
+
+        // Candidate pool: same name in this institute (tenant filter applies).
+        var candidates = await _db.Students.AsNoTracking()
+            .Include(s => s.Guardians)
+            .Include(s => s.Enrollments).ThenInclude(e => e.Class)
+            .Where(s => !s.IsDeleted
+                     && s.IsActive
+                     && s.FirstName.ToLower() == first.ToLower()
+                     && s.LastName.ToLower() == last.ToLower())
+            .ToListAsync();
+
+        foreach (var s in candidates)
+        {
+            var gMatch = s.Guardians.Where(g => !g.IsDeleted).ToList();
+            var matchReason = (string?)null;
+
+            if (!string.IsNullOrEmpty(cnicDigits) &&
+                gMatch.Any(g => DigitsOnly(g.CNIC) == cnicDigits))
+                matchReason = "name + guardian CNIC";
+            else if (!string.IsNullOrEmpty(phoneDigits) && phoneDigits.Length >= 10 &&
+                     gMatch.Any(g => DigitsOnly(g.Phone) == phoneDigits))
+                matchReason = "name + guardian phone";
+            else if (!string.IsNullOrEmpty(fatherName) &&
+                     gMatch.Any(g => (g.FullName ?? "").Trim().ToLower() == fatherName) &&
+                     dto.DateOfBirth.HasValue && s.DateOfBirth == dto.DateOfBirth)
+                matchReason = "name + guardian + date of birth";
+            else if (!string.IsNullOrEmpty(fatherName) &&
+                     gMatch.Any(g => (g.FullName ?? "").Trim().ToLower() == fatherName) &&
+                     !dto.DateOfBirth.HasValue)
+                matchReason = "name + guardian name";
+
+            if (matchReason is not null)
+                return ToHit(s, targetClassId, targetYearId, matchReason);
+        }
+
+        return null;
+    }
+
+    private static DuplicateStudentHit ToHit(Student s, int classId, int yearId, string reason)
+    {
+        var inClass = s.Enrollments?.Any(e =>
+            e.ClassId == classId &&
+            e.AcademicYearId == yearId &&
+            e.Status == "Active") == true;
+
+        var current = s.Enrollments?
+            .Where(e => e.Status == "Active")
+            .OrderByDescending(e => e.EnrollmentDate)
+            .FirstOrDefault();
+
+        var classLabel = current?.Class is null
+            ? null
+            : current.Class.ClassName + (string.IsNullOrWhiteSpace(current.Class.Section) ? "" : " " + current.Class.Section);
+
+        return new DuplicateStudentHit
+        {
+            StudentId      = s.StudentId,
+            AdmissionNo    = s.AdmissionNo,
+            FullName       = $"{s.FirstName} {s.LastName}".Trim(),
+            AlreadyInClass = inClass,
+            CurrentClass   = classLabel,
+            MatchReason    = reason
+        };
+    }
+
+    private static string? DigitsOnly(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        return digits.Length >= 5 ? digits : null;
+    }
+
     // ── New admission ─────────────────────────────────────────────────────
     public async Task<StudentDetailDto> CreateAdmissionAsync(CreateStudentAdmissionDto dto, int createdBy)
     {
@@ -250,14 +353,18 @@ public class StudentService : IStudentService
         var classRow = await _db.Classes.FirstOrDefaultAsync(c => c.ClassId == dto.ClassId);
         if (classRow is null) throw new ArgumentException($"ClassId {dto.ClassId} does not exist.");
 
-        var admissionDate = dto.AdmissionDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
-
-        // If a custom admission number is supplied (existing/old student), validate uniqueness up-front.
-        if (!string.IsNullOrWhiteSpace(dto.CustomAdmissionNo))
+        var dup = await FindDuplicateAsync(dto, dto.ClassId, dto.AcademicYearId);
+        if (dup is not null)
         {
-            var exists = await _db.Students.AnyAsync(s => s.AdmissionNo == dto.CustomAdmissionNo.Trim() && !s.IsDeleted);
-            if (exists) throw new InvalidOperationException($"Admission number '{dto.CustomAdmissionNo.Trim()}' is already in use.");
+            if (dup.AlreadyInClass)
+                throw new InvalidOperationException(
+                    $"Duplicate: '{dup.FullName}' already enrolled in this class ({dup.AdmissionNo}).");
+            throw new InvalidOperationException(
+                $"Duplicate: '{dup.FullName}' already exists as {dup.AdmissionNo}" +
+                (dup.CurrentClass is null ? "." : $" (currently in {dup.CurrentClass})."));
         }
+
+        var admissionDate = dto.AdmissionDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
         // Generate admission number with retry — the unique index on AdmissionNo
         // protects against the rare race where two admissions in the same year
@@ -1034,13 +1141,6 @@ public class StudentService : IStudentService
         "Please sign in and change your password after first login.\n" +
         "— OneSkool";
 
-    private static string? NormalizeCnic(string? cnic)
-    {
-        if (string.IsNullOrWhiteSpace(cnic)) return null;
-        var digits = new string(cnic.Where(char.IsDigit).ToArray());
-        return digits.Length >= 5 ? digits : cnic.Trim();
-    }
-
     /// <summary>
     /// Sets SiblingGroupKey from the earliest guardian CNIC and assigns SiblingOrder
     /// (1..n by admission date / student id within the institute).
@@ -1084,4 +1184,18 @@ public class StudentService : IStudentService
 
         await _db.SaveChangesAsync();
     }
+
+    private static string? NormalizeCnic(string? cnic) =>
+        DigitsOnly(cnic) ?? (string.IsNullOrWhiteSpace(cnic) ? null : cnic.Trim());
+}
+
+/// <summary>Result of soft duplicate detection for admissions/import.</summary>
+public class DuplicateStudentHit
+{
+    public int StudentId { get; set; }
+    public string AdmissionNo { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public bool AlreadyInClass { get; set; }
+    public string? CurrentClass { get; set; }
+    public string MatchReason { get; set; } = "";
 }

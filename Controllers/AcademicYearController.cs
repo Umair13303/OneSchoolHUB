@@ -10,7 +10,7 @@ namespace SchoolManagement.API.Controllers;
 /// Bonus controller for Module 4 — Academic Years aren't called out in the
 /// task doc's endpoint list, but every Class is scoped to one so we need
 /// CRUD here. Reads are open to any authenticated user (dropdowns); writes
-/// are SuperAdmin/Admin per the "Class & Subject Setup" access row.
+/// are SuperAdmin/Admin.
 /// </summary>
 [ApiController]
 [Route("api/academic-years")]
@@ -40,7 +40,7 @@ public class AcademicYearController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Create([FromBody] CreateAcademicYearDto dto)
     {
         try
@@ -53,7 +53,7 @@ public class AcademicYearController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateAcademicYearDto dto)
     {
         try
@@ -66,7 +66,7 @@ public class AcademicYearController : ControllerBase
     }
 
     [HttpPost("{id:int}/set-active")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> SetActive(int id)
     {
         var ok = await _service.SetActiveAsync(id, CurrentUserId());
@@ -74,7 +74,7 @@ public class AcademicYearController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Delete(int id)
     {
         try

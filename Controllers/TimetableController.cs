@@ -89,7 +89,7 @@ public class TimetableController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Create([FromBody] CreateTimetableEntryDto dto)
     {
         try
@@ -102,7 +102,7 @@ public class TimetableController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateTimetableEntryDto dto)
     {
         try
@@ -115,7 +115,7 @@ public class TimetableController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin,principal")]
+    [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> Delete(int id)
     {
         var ok = await _service.SoftDeleteAsync(id, CurrentUserId());

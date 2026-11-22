@@ -28,7 +28,7 @@ public class SubjectController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Create([FromBody] CreateSubjectDto dto)
     {
         try
@@ -41,7 +41,7 @@ public class SubjectController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSubjectDto dto)
     {
         try
@@ -54,7 +54,7 @@ public class SubjectController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "superadmin,admin")]
     public async Task<IActionResult> Delete(int id)
     {
         try

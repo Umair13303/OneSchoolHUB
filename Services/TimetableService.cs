@@ -139,12 +139,29 @@ public class TimetableService : ITimetableService
 
     private async Task ValidateForeignKeysAsync(int classId, int subjectId, int teacherId, int periodId, int academicYearId)
     {
-        if (!await _db.Classes.AnyAsync(c => c.ClassId == classId))
+        var clazz = await _db.Classes.FirstOrDefaultAsync(c => c.ClassId == classId);
+        if (clazz is null)
             throw new ArgumentException($"Class {classId} does not exist.");
-        if (!await _db.Subjects.AnyAsync(s => s.SubjectId == subjectId))
+        if (!clazz.IsActive)
+            throw new ArgumentException($"Class {classId} is inactive.");
+
+        var subject = await _db.Subjects.FirstOrDefaultAsync(s => s.SubjectId == subjectId);
+        if (subject is null)
             throw new ArgumentException($"Subject {subjectId} does not exist.");
+        if (!subject.IsActive)
+            throw new ArgumentException($"Subject {subjectId} is inactive.");
+
         if (!await _db.AcademicYears.AnyAsync(y => y.AcademicYearId == academicYearId && !y.IsDeleted))
             throw new ArgumentException($"AcademicYear {academicYearId} does not exist.");
+
+        var classSubject = await _db.ClassSubjects
+            .FirstOrDefaultAsync(cs => cs.ClassId == classId && cs.SubjectId == subjectId && cs.IsActive);
+        if (classSubject is null)
+            throw new ArgumentException("Subject is not assigned (or not active) for this class. Link it under Subjects first.");
+
+        if (classSubject.TeacherId.HasValue && classSubject.TeacherId.Value > 0 &&
+            classSubject.TeacherId.Value != teacherId)
+            throw new ArgumentException("Teacher does not match the subject teacher assigned for this class.");
 
         var period = await _db.Periods.FirstOrDefaultAsync(p => p.PeriodId == periodId && !p.IsDeleted);
         if (period is null)

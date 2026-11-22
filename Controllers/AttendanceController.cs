@@ -50,8 +50,9 @@ public class AttendanceController : ControllerBase
                 new { classId = record.ClassId, date = record.Date.ToString("yyyy-MM-dd") },
                 record);
         }
-        catch (ArgumentException ex)        { return BadRequest(new { error = ex.Message }); }
-        catch (InvalidOperationException ex){ return Conflict(new { error = ex.Message }); }
+        catch (ArgumentException ex)          { return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex)  { return Conflict(new { error = ex.Message }); }
+        catch (UnauthorizedAccessException ex){ return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message }); }
     }
 
     /// <summary>Mark attendance for all students in a class for one period at once.</summary>
@@ -64,8 +65,9 @@ public class AttendanceController : ControllerBase
             var records = await _service.BulkMarkAsync(dto, CurrentUserId());
             return Ok(records);
         }
-        catch (ArgumentException ex)        { return BadRequest(new { error = ex.Message }); }
-        catch (InvalidOperationException ex){ return Conflict(new { error = ex.Message }); }
+        catch (ArgumentException ex)          { return BadRequest(new { error = ex.Message }); }
+        catch (InvalidOperationException ex)  { return Conflict(new { error = ex.Message }); }
+        catch (UnauthorizedAccessException ex){ return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message }); }
     }
 
     /// <summary>Update an existing attendance record (change status or remarks).</summary>

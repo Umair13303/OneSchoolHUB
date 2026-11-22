@@ -29,6 +29,7 @@ public class AttendanceService : IAttendanceService
     {
         Validate(dto.Status);
         await EnsureForeignKeysAsync(dto.ClassId, dto.PeriodId, dto.StudentId);
+        await EnsureMarkingAllowedAsync(dto.ClassId, dto.Date, new[] { dto.StudentId }, markedBy);
 
         var existing = await _db.Attendances.FirstOrDefaultAsync(a =>
             a.StudentId == dto.StudentId &&
@@ -70,9 +71,12 @@ public class AttendanceService : IAttendanceService
         foreach (var e in dto.Entries)
             Validate(e.Status);
 
-        var studentIds = dto.Entries.Select(e => e.StudentId).ToList();
+        var studentIds = dto.Entries.Select(e => e.StudentId).Distinct().ToList();
+        if (studentIds.Count != dto.Entries.Count)
+            throw new ArgumentException("Duplicate students in attendance entries.");
 
-        // Find which students already have attendance for this slot
+        await EnsureMarkingAllowedAsync(dto.ClassId, dto.Date, studentIds, markedBy);
+
         var existing = await _db.Attendances
             .Where(a => a.ClassId == dto.ClassId &&
                         a.PeriodId == dto.PeriodId &&
@@ -120,8 +124,10 @@ public class AttendanceService : IAttendanceService
         var entity = await _db.Attendances.FirstOrDefaultAsync(a => a.AttendanceId == id);
         if (entity is null) return false;
 
-        entity.Status  = Normalise(dto.Status);
-        entity.Remarks = dto.Remarks;
+        entity.Status   = Normalise(dto.Status);
+        entity.Remarks  = dto.Remarks;
+        entity.MarkedBy = updatedBy;
+        entity.MarkedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return true;
     }
@@ -228,8 +234,8 @@ public class AttendanceService : IAttendanceService
 
     private async Task EnsureForeignKeysAsync(int classId, int periodId, int studentId)
     {
-        if (!await _db.Classes.AnyAsync(c => c.ClassId == classId))
-            throw new ArgumentException($"Class {classId} does not exist.");
+        if (!await _db.Classes.AnyAsync(c => c.ClassId == classId && c.IsActive))
+            throw new ArgumentException($"Class {classId} does not exist or is inactive.");
         if (!await _db.Students.AnyAsync(s => s.StudentId == studentId))
             throw new ArgumentException($"Student {studentId} does not exist.");
         await EnsurePeriodExistsAsync(periodId);
@@ -242,6 +248,62 @@ public class AttendanceService : IAttendanceService
             throw new ArgumentException($"Period {periodId} does not exist.");
         if (period.IsBreak)
             throw new ArgumentException("Cannot mark attendance for a break period.");
+    }
+
+    private async Task EnsureMarkingAllowedAsync(int classId, DateOnly date, IEnumerable<int> studentIds, int markedBy)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (date > today)
+            throw new ArgumentException("Cannot mark attendance for a future date.");
+
+        var activeYear = await _db.AcademicYears
+            .AsNoTracking()
+            .Where(y => y.IsActive && !y.IsDeleted)
+            .OrderByDescending(y => y.StartDate)
+            .FirstOrDefaultAsync();
+
+        if (activeYear is not null && (date < activeYear.StartDate || date > activeYear.EndDate))
+            throw new ArgumentException("Attendance date must fall within the active academic year.");
+
+        var isHoliday = await _db.AcademicCalendarEvents
+            .AsNoTracking()
+            .Include(e => e.CalendarEventType)
+            .AnyAsync(e =>
+                !e.IsDeleted &&
+                (activeYear == null || e.AcademicYearId == activeYear.AcademicYearId) &&
+                e.StartDate <= date &&
+                (e.EndDate ?? e.StartDate) >= date &&
+                e.CalendarEventType != null &&
+                (e.CalendarEventType.Name.Contains("Holiday") ||
+                 e.CalendarEventType.Name.Contains("holiday")));
+        if (isHoliday)
+            throw new InvalidOperationException("Cannot mark attendance on a holiday.");
+
+        var ids = studentIds.Distinct().ToList();
+        var enrolledQuery = _db.StudentClassEnrollments.AsNoTracking()
+            .Where(e => e.ClassId == classId && e.Status == "Active" && ids.Contains(e.StudentId));
+        if (activeYear is not null)
+            enrolledQuery = enrolledQuery.Where(e => e.AcademicYearId == activeYear.AcademicYearId);
+
+        var enrolledIds = await enrolledQuery.Select(e => e.StudentId).ToListAsync();
+        var missing = ids.Except(enrolledIds).ToList();
+        if (missing.Count > 0)
+            throw new InvalidOperationException(
+                $"Student(s) [{string.Join(", ", missing)}] are not actively enrolled in this class for the current year.");
+
+        // Teachers may only mark classes they teach (class teacher or subject teacher).
+        var marker = await _db.Users.Include(u => u.Role)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == markedBy);
+        if (marker is not null &&
+            string.Equals(marker.Role.RoleName, "teacher", StringComparison.OrdinalIgnoreCase))
+        {
+            var allowed =
+                await _db.Classes.AnyAsync(c => c.ClassId == classId && c.ClassTeacherId == markedBy) ||
+                await _db.ClassSubjects.AnyAsync(cs => cs.ClassId == classId && cs.TeacherId == markedBy && cs.IsActive);
+            if (!allowed)
+                throw new UnauthorizedAccessException("You can only mark attendance for classes you teach.");
+        }
     }
 
     private static void Validate(string status)
