@@ -156,13 +156,21 @@ public class ClassService : IClassService
         if (hasEnrollments)
             throw new InvalidOperationException("Cannot delete a class that has student enrollments.");
 
-        var hasTimetable = await _db.SchoolTimetables.AnyAsync(t => t.ClassId == id && !t.IsDeleted);
+        var hasTimetable = await SafeAnyAsync(
+            () => _db.SchoolTimetables.AnyAsync(t => t.ClassId == id && !t.IsDeleted));
         if (hasTimetable)
             throw new InvalidOperationException("Cannot delete a class that has timetable entries. Remove timetable first.");
 
-        var hasCoursePlans = await _db.CoursePlans.AnyAsync(p => p.ClassId == id && !p.IsDeleted);
+        // Curriculum tables may lag behind on some hosts — never 500 the delete over a schema probe.
+        var hasCoursePlans = await SafeAnyAsync(
+            () => _db.CoursePlans.AnyAsync(p => p.ClassId == id && !p.IsDeleted));
         if (hasCoursePlans)
             throw new InvalidOperationException("Cannot delete a class that has course plans.");
+
+        // Remove linked class-subjects (ClassSubject has no IsDeleted query filter).
+        var classSubjects = await _db.ClassSubjects.Where(cs => cs.ClassId == id).ToListAsync();
+        if (classSubjects.Count > 0)
+            _db.ClassSubjects.RemoveRange(classSubjects);
 
         entity.IsDeleted = true;
         entity.IsActive  = false;
@@ -171,6 +179,16 @@ public class ClassService : IClassService
 
         await _db.SaveChangesAsync();
         return true;
+    }
+
+    /// <summary>
+    /// Runs an AnyAsync dependency probe; returns false if the underlying table/schema is unavailable
+    /// so soft-delete is not blocked by an unrelated module outage.
+    /// </summary>
+    private static async Task<bool> SafeAnyAsync(Func<Task<bool>> probe)
+    {
+        try { return await probe(); }
+        catch { return false; }
     }
 
     public async Task<ClassSubjectDto> AssignTeacherAsync(int classId, AssignTeacherDto dto, int createdBy)

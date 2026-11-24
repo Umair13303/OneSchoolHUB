@@ -74,6 +74,10 @@ public class ClassController : ControllerBase
             return ok ? NoContent() : NotFound();
         }
         catch (InvalidOperationException ex){ return Conflict(new { error = ex.Message }); }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message, detail = ex.InnerException?.Message });
+        }
     }
 
     /// <summary>Assign (or replace) the teacher for one subject in this class. Conflicts return 409 unless ReplaceExisting is true.</summary>
