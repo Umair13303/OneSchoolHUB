@@ -581,17 +581,20 @@ public class FeeService(AppDbContext db) : IFeeService
             {
                 var first = g.First();
                 var ae = first.Student.Enrollments?.FirstOrDefault(e => e.Status == "Active" && !e.IsDeleted);
+                // Waived lines stay in Due/Paid/Discount history but never in outstanding.
+                var active = g.Where(x => !string.Equals(x.Status, "Waived", StringComparison.OrdinalIgnoreCase)).ToList();
                 return new FeeReportRowDto
                 {
                     StudentId = g.Key,
                     StudentName = first.Student.FirstName + " " + first.Student.LastName,
                     AdmissionNo = first.Student.AdmissionNo,
                     ClassName = ae?.Class != null ? $"{ae.Class.ClassName} {ae.Class.Section}" : "",
-                    TotalDue = g.Sum(x => x.AmountDue), TotalPaid = g.Sum(x => x.AmountPaid),
-                    TotalDiscount = g.Sum(x => x.Discount),
-                    UnpaidCount = (g.Sum(x => x.AmountDue) - g.Sum(x => x.Discount) - g.Sum(x => x.AmountPaid)) > 0 && g.Sum(x => x.AmountPaid) == 0 ? 1 : 0,
-                    PaidCount   = (g.Sum(x => x.AmountDue) - g.Sum(x => x.Discount) - g.Sum(x => x.AmountPaid)) <= 0 ? 1 : 0,
-                    PartialCount = (g.Sum(x => x.AmountDue) - g.Sum(x => x.Discount) - g.Sum(x => x.AmountPaid)) > 0 && g.Sum(x => x.AmountPaid) > 0 ? 1 : 0
+                    TotalDue = active.Sum(x => x.AmountDue),
+                    TotalPaid = active.Sum(x => x.AmountPaid),
+                    TotalDiscount = active.Sum(x => x.Discount),
+                    UnpaidCount = g.Count(x => string.Equals(x.Status, "Unpaid", StringComparison.OrdinalIgnoreCase)),
+                    PartialCount = g.Count(x => string.Equals(x.Status, "Partial", StringComparison.OrdinalIgnoreCase)),
+                    PaidCount = g.Count(x => string.Equals(x.Status, "Paid", StringComparison.OrdinalIgnoreCase))
                 };
             })
             .OrderBy(r => r.StudentName)

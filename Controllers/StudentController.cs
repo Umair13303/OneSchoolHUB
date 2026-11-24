@@ -280,7 +280,9 @@ public class StudentController : ControllerBase
 
         var dues = await _db.StudentFees
             .Include(f => f.FeeStructure).ThenInclude(fs => fs.FeeType)
-            .Where(f => f.StudentId == id && (f.Status == "Unpaid" || f.Status == "Partial"))
+            .Where(f => f.StudentId == id
+                     && !f.IsDeleted
+                     && (f.Status == "Unpaid" || f.Status == "Partial"))
             .Select(f => new {
                 f.StudentFeeId,
                 FeeTypeName = f.FeeStructure.FeeType.Name,
@@ -293,13 +295,20 @@ public class StudentController : ControllerBase
             })
             .ToListAsync();
 
+        // Clamp tiny negative rounding noise; waived already excluded by status filter.
+        var lines = dues.Select(d => new {
+            d.StudentFeeId, d.FeeTypeName, d.AmountDue, d.AmountPaid, d.Discount,
+            Balance = d.Balance < 0 ? 0 : d.Balance,
+            d.DueDate, d.Status
+        }).Where(d => d.Balance > 0).ToList();
+
         return Ok(new {
             studentId   = id,
             fullName    = student.FirstName + " " + student.LastName,
             admissionNo = student.AdmissionNo,
-            totalDues   = dues.Sum(d => d.Balance),
-            hasDues     = dues.Any(),
-            dues
+            totalDues   = lines.Sum(d => d.Balance),
+            hasDues     = lines.Any(),
+            dues        = lines
         });
     }
 
@@ -322,10 +331,11 @@ public class StudentController : ControllerBase
         if (!student.IsActive)
             return BadRequest(new { error = "Student is already inactive/withdrawn." });
 
-        // Check unpaid dues
+        // Check unpaid dues (waived excluded; clamp noise)
         var totalDues = await _db.StudentFees
-            .Where(f => f.StudentId == id && (f.Status == "Unpaid" || f.Status == "Partial"))
+            .Where(f => f.StudentId == id && !f.IsDeleted && (f.Status == "Unpaid" || f.Status == "Partial"))
             .SumAsync(f => f.AmountDue - f.AmountPaid - f.Discount);
+        if (totalDues < 0) totalDues = 0;
 
         if (totalDues > 0 && !dto.ForceWithdraw)
             return Conflict(new { error = $"Student has outstanding dues of {totalDues:0.00}. Clear dues or use force withdraw.", totalDues });

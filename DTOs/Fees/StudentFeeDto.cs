@@ -14,7 +14,11 @@ public class StudentFeeDto
     public decimal AmountDue { get; set; }
     public decimal AmountPaid { get; set; }
     public decimal Discount { get; set; }
-    public decimal Balance => AmountDue - Discount - AmountPaid;
+    /// <summary>Outstanding for this line. Waived fees contribute 0.</summary>
+    public decimal Balance =>
+        string.Equals(Status, "Waived", StringComparison.OrdinalIgnoreCase)
+            ? 0
+            : Math.Max(0, AmountDue - Discount - AmountPaid);
     public DateOnly DueDate { get; set; }
     public int? FeeMonth { get; set; }
     public string Status { get; set; } = string.Empty;

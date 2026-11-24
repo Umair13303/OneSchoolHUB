@@ -31,7 +31,7 @@ public class FeeReportRowDto
     public decimal TotalDue { get; set; }
     public decimal TotalPaid { get; set; }
     public decimal TotalDiscount { get; set; }
-    public decimal Balance => TotalDue - TotalDiscount - TotalPaid;
+    public decimal Balance => Math.Max(0, TotalDue - TotalDiscount - TotalPaid);
     public int UnpaidCount { get; set; }
     public int PaidCount { get; set; }
     public int PartialCount { get; set; }
