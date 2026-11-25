@@ -302,6 +302,21 @@ public class StudentController : ControllerBase
             d.DueDate, d.Status
         }).Where(d => d.Balance > 0).ToList();
 
+        var opening = await _db.StudentOpeningBalances
+            .Where(o => o.StudentId == id && !o.IsDeleted && (o.Status == "Unpaid" || o.Status == "Partial"))
+            .Select(o => new {
+                StudentFeeId = -o.StudentOpeningBalanceId,
+                FeeTypeName = "Opening Balance",
+                AmountDue = o.Amount,
+                AmountPaid = o.AmountPaid,
+                Discount = 0m,
+                Balance = o.Amount - o.AmountPaid < 0 ? 0m : o.Amount - o.AmountPaid,
+                DueDate = o.AsOfDate,
+                o.Status
+            })
+            .ToListAsync();
+        lines.AddRange(opening.Where(o => o.Balance > 0));
+
         return Ok(new {
             studentId   = id,
             fullName    = student.FirstName + " " + student.LastName,
@@ -335,6 +350,10 @@ public class StudentController : ControllerBase
         var totalDues = await _db.StudentFees
             .Where(f => f.StudentId == id && !f.IsDeleted && (f.Status == "Unpaid" || f.Status == "Partial"))
             .SumAsync(f => f.AmountDue - f.AmountPaid - f.Discount);
+        var openingDues = await _db.StudentOpeningBalances
+            .Where(o => o.StudentId == id && !o.IsDeleted && (o.Status == "Unpaid" || o.Status == "Partial"))
+            .SumAsync(o => o.Amount - o.AmountPaid);
+        totalDues += openingDues;
         if (totalDues < 0) totalDues = 0;
 
         if (totalDues > 0 && !dto.ForceWithdraw)

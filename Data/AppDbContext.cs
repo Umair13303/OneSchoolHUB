@@ -76,6 +76,7 @@ public class AppDbContext : DbContext
     public DbSet<FeeStructure> FeeStructures => Set<FeeStructure>();
     public DbSet<StudentFee> StudentFees => Set<StudentFee>();
     public DbSet<FeePayment> FeePayments => Set<FeePayment>();
+    public DbSet<StudentOpeningBalance> StudentOpeningBalances => Set<StudentOpeningBalance>();
     public DbSet<DiscountPolicy> DiscountPolicies => Set<DiscountPolicy>();
     public DbSet<StudentDiscount> StudentDiscounts => Set<StudentDiscount>();
     public DbSet<Staff> Staff => Set<Staff>();
@@ -188,6 +189,8 @@ public class AppDbContext : DbContext
             !f.IsDeleted && (IsSuperAdmin || f.InstituteId == null || f.InstituteId == TenantId));
         modelBuilder.Entity<StudentFee>().HasQueryFilter(sf =>
             !sf.IsDeleted && (IsSuperAdmin || sf.InstituteId == null || sf.InstituteId == TenantId));
+        modelBuilder.Entity<StudentOpeningBalance>().HasQueryFilter(ob =>
+            !ob.IsDeleted && (IsSuperAdmin || ob.InstituteId == null || ob.InstituteId == TenantId));
         modelBuilder.Entity<DiscountPolicy>().HasQueryFilter(d =>
             !d.IsDeleted && (IsSuperAdmin || d.InstituteId == null || d.InstituteId == TenantId));
         modelBuilder.Entity<StudentDiscount>().HasQueryFilter(sd =>
@@ -494,6 +497,18 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<StudentFee>().Property(sf => sf.AmountPaid).HasPrecision(12, 2);
         modelBuilder.Entity<StudentFee>().Property(sf => sf.Discount).HasPrecision(12, 2);
         modelBuilder.Entity<FeePayment>().Property(fp => fp.AmountPaid).HasPrecision(12, 2);
+
+        modelBuilder.Entity<StudentOpeningBalance>().HasKey(o => o.StudentOpeningBalanceId);
+        modelBuilder.Entity<StudentOpeningBalance>().Property(o => o.Amount).HasPrecision(12, 2);
+        modelBuilder.Entity<StudentOpeningBalance>().Property(o => o.AmountPaid).HasPrecision(12, 2);
+        modelBuilder.Entity<StudentOpeningBalance>()
+            .HasOne(o => o.Student).WithMany().HasForeignKey(o => o.StudentId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StudentOpeningBalance>()
+            .HasOne(o => o.AcademicYear).WithMany().HasForeignKey(o => o.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<StudentOpeningBalance>()
+            .HasIndex(o => new { o.StudentId, o.AcademicYearId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         modelBuilder.Entity<StudentGuardian>().HasKey(g => g.GuardianId);
         modelBuilder.Entity<StudentClassEnrollment>().HasKey(e => e.EnrollmentId);
         modelBuilder.Entity<MenuRolePermission>().HasKey(m => m.Id);

@@ -574,6 +574,146 @@ BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'Manual_DetachMismatchedHappyDayYear_20261031', N'9.0.0');
 END");
+
+    // Happy Day fee pattern: admission once, examination only when generated,
+    // monthly tuition by class band. Inserts missing rows only, so later edits stay.
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+DECLARE @Inst INT = (
+    SELECT TOP 1 InstituteId FROM Institutes
+    WHERE IsDeleted = 0
+      AND REPLACE(LOWER(Name), N' ', N'') LIKE N'%happyday%'
+    ORDER BY InstituteId);
+
+IF @Inst IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM FeeTypes WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Admission Fee')
+        INSERT INTO FeeTypes (Name, Description, FeeCategory, IsActive, IsDeleted, CreatedAt, InstituteId)
+        VALUES (N'Admission Fee', N'Payable once, at admission', 1, 1, 0, SYSUTCDATETIME(), @Inst);
+
+    IF NOT EXISTS (SELECT 1 FROM FeeTypes WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Examination Fee')
+        INSERT INTO FeeTypes (Name, Description, FeeCategory, IsActive, IsDeleted, CreatedAt, InstituteId)
+        VALUES (N'Examination Fee', N'Charged only in examination months', 2, 1, 0, SYSUTCDATETIME(), @Inst);
+
+    IF NOT EXISTS (SELECT 1 FROM FeeTypes WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Monthly Tuition')
+        INSERT INTO FeeTypes (Name, Description, FeeCategory, IsActive, IsDeleted, CreatedAt, InstituteId)
+        VALUES (N'Monthly Tuition', N'Charged every month according to class', 0, 1, 0, SYSUTCDATETIME(), @Inst);
+
+    UPDATE FeeTypes SET FeeCategory = 1, IsActive = 1
+    WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Admission Fee' AND FeeCategory <> 1;
+    UPDATE FeeTypes SET FeeCategory = 2, IsActive = 1
+    WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Examination Fee' AND FeeCategory <> 2;
+    UPDATE FeeTypes SET FeeCategory = 0, IsActive = 1
+    WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Monthly Tuition' AND FeeCategory <> 0;
+
+    DECLARE @Admission INT = (SELECT TOP 1 FeeTypeId FROM FeeTypes WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Admission Fee');
+    DECLARE @Exam INT = (SELECT TOP 1 FeeTypeId FROM FeeTypes WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Examination Fee');
+    DECLARE @Tuition INT = (SELECT TOP 1 FeeTypeId FROM FeeTypes WHERE InstituteId = @Inst AND IsDeleted = 0 AND Name = N'Monthly Tuition');
+
+    ;WITH Bands AS (
+        SELECT c.ClassId, c.CampusId,
+            CASE
+                WHEN n LIKE N'%play%' OR n LIKE N'%nursery%' OR n LIKE N'%kg%' OR n LIKE N'%prep%' OR n LIKE N'%toddler%'
+                    THEN CAST(2000 AS decimal(12,2))
+                WHEN n LIKE N'%class 10%' OR n LIKE N'%class 11%' OR n LIKE N'%class 12%'
+                  OR n LIKE N'%grade 10%' OR n LIKE N'%grade 11%' OR n LIKE N'%grade 12%'
+                  OR n LIKE N'%class 9%' OR n LIKE N'%grade 9%'
+                  OR n IN (N'9', N'10', N'11', N'12')
+                    THEN NULL
+                WHEN n LIKE N'%class 8%' OR n LIKE N'%class-8%' OR n LIKE N'%class8%' OR n LIKE N'%grade 8%' OR n LIKE N'%grade8%' OR n LIKE N'%8th%' OR n = N'8'
+                  OR n LIKE N'%class 7%' OR n LIKE N'%class-7%' OR n LIKE N'%class7%' OR n LIKE N'%grade 7%' OR n LIKE N'%grade7%' OR n LIKE N'%7th%' OR n = N'7'
+                  OR n LIKE N'%class 6%' OR n LIKE N'%class-6%' OR n LIKE N'%class6%' OR n LIKE N'%grade 6%' OR n LIKE N'%grade6%' OR n LIKE N'%6th%' OR n = N'6'
+                  OR n LIKE N'%class 5%' OR n LIKE N'%class-5%' OR n LIKE N'%class5%' OR n LIKE N'%grade 5%' OR n LIKE N'%grade5%' OR n LIKE N'%5th%' OR n = N'5'
+                    THEN CAST(2500 AS decimal(12,2))
+                WHEN n LIKE N'%class 4%' OR n LIKE N'%class-4%' OR n LIKE N'%class4%' OR n LIKE N'%grade 4%' OR n LIKE N'%grade4%' OR n LIKE N'%4th%' OR n = N'4'
+                  OR n LIKE N'%class 3%' OR n LIKE N'%class-3%' OR n LIKE N'%class3%' OR n LIKE N'%grade 3%' OR n LIKE N'%grade3%' OR n LIKE N'%3rd%' OR n = N'3'
+                  OR n LIKE N'%class 2%' OR n LIKE N'%class-2%' OR n LIKE N'%class2%' OR n LIKE N'%grade 2%' OR n LIKE N'%grade2%' OR n LIKE N'%2nd%' OR n = N'2'
+                  OR n LIKE N'%class 1%' OR n LIKE N'%class-1%' OR n LIKE N'%class1%' OR n LIKE N'%grade 1%' OR n LIKE N'%grade1%' OR n LIKE N'%1st%' OR n = N'1'
+                    THEN CAST(2200 AS decimal(12,2))
+                ELSE NULL
+            END AS Tuition
+        FROM Classes c
+        CROSS APPLY (SELECT LOWER(LTRIM(RTRIM(c.ClassName))) AS n) nm
+        WHERE c.InstituteId = @Inst AND c.IsDeleted = 0 AND c.IsActive = 1
+    )
+    INSERT INTO FeeStructures
+        (FeeTypeId, ClassId, AcademicYearId, Amount, DueDay, IsActive, IsDeleted, CreatedAt, InstituteId, CampusId)
+    SELECT @Admission, b.ClassId, y.AcademicYearId, 2000, N'Once', 1, 0, SYSUTCDATETIME(), @Inst, b.CampusId
+    FROM Bands b
+    CROSS JOIN AcademicYears y
+    WHERE y.InstituteId = @Inst AND y.IsDeleted = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM FeeStructures fs
+          WHERE fs.FeeTypeId = @Admission AND fs.ClassId = b.ClassId
+            AND fs.AcademicYearId = y.AcademicYearId AND fs.IsDeleted = 0)
+
+    UNION ALL
+    SELECT @Exam, b.ClassId, y.AcademicYearId, 1500, N'Examination', 1, 0, SYSUTCDATETIME(), @Inst, b.CampusId
+    FROM Bands b
+    CROSS JOIN AcademicYears y
+    WHERE y.InstituteId = @Inst AND y.IsDeleted = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM FeeStructures fs
+          WHERE fs.FeeTypeId = @Exam AND fs.ClassId = b.ClassId
+            AND fs.AcademicYearId = y.AcademicYearId AND fs.IsDeleted = 0)
+
+    UNION ALL
+    SELECT @Tuition, b.ClassId, y.AcademicYearId, b.Tuition, N'Monthly', 1, 0, SYSUTCDATETIME(), @Inst, b.CampusId
+    FROM Bands b
+    CROSS JOIN AcademicYears y
+    WHERE b.Tuition IS NOT NULL AND y.InstituteId = @Inst AND y.IsDeleted = 0
+      AND NOT EXISTS (
+          SELECT 1 FROM FeeStructures fs
+          WHERE fs.FeeTypeId = @Tuition AND fs.ClassId = b.ClassId
+            AND fs.AcademicYearId = y.AcademicYearId AND fs.IsDeleted = 0);
+END");
+
+    await photoDb.Database.ExecuteSqlRawAsync(@"
+SET QUOTED_IDENTIFIER ON;
+IF OBJECT_ID(N'dbo.StudentOpeningBalances', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.StudentOpeningBalances (
+        StudentOpeningBalanceId INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        StudentId INT NOT NULL,
+        AcademicYearId INT NOT NULL,
+        Amount DECIMAL(12,2) NOT NULL,
+        AmountPaid DECIMAL(12,2) NOT NULL CONSTRAINT DF_StudentOpeningBalances_AmountPaid DEFAULT (0),
+        AsOfDate DATE NOT NULL,
+        Remarks NVARCHAR(500) NULL,
+        Status NVARCHAR(20) NOT NULL CONSTRAINT DF_StudentOpeningBalances_Status DEFAULT (N'Unpaid'),
+        IsDeleted BIT NOT NULL CONSTRAINT DF_StudentOpeningBalances_IsDeleted DEFAULT (0),
+        CreatedBy INT NULL,
+        UpdatedBy INT NULL,
+        CreatedAt DATETIME2 NOT NULL CONSTRAINT DF_StudentOpeningBalances_CreatedAt DEFAULT (SYSUTCDATETIME()),
+        UpdatedAt DATETIME2 NULL,
+        InstituteId INT NULL,
+        CampusId INT NULL,
+        CONSTRAINT FK_StudentOpeningBalances_Students FOREIGN KEY (StudentId) REFERENCES dbo.Students (StudentId),
+        CONSTRAINT FK_StudentOpeningBalances_AcademicYears FOREIGN KEY (AcademicYearId) REFERENCES dbo.AcademicYears (AcademicYearId)
+    );
+    CREATE UNIQUE INDEX IX_StudentOpeningBalances_Student_Year
+        ON dbo.StudentOpeningBalances (StudentId, AcademicYearId)
+        WHERE IsDeleted = 0;
+END
+
+IF NOT EXISTS (SELECT 1 FROM dbo.MenuItems WHERE RouteUrl = N'/fees/opening-balance' AND IsDeleted = 0)
+    INSERT INTO dbo.MenuItems
+        (ParentId, Title, Icon, RouteUrl, SortOrder, IsActive, IsDeleted, CreatedAt)
+    VALUES
+        (20, N'Student OB', N'account_balance_wallet', N'/fees/opening-balance', 80, 1, 0, SYSUTCDATETIME());
+
+DECLARE @ObMenu INT = (
+    SELECT TOP 1 MenuItemId FROM dbo.MenuItems
+    WHERE RouteUrl = N'/fees/opening-balance' AND IsDeleted = 0
+    ORDER BY MenuItemId);
+IF @ObMenu IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM dbo.MenuRolePermissions WHERE MenuItemId = @ObMenu AND RoleId = 1)
+        INSERT INTO dbo.MenuRolePermissions (MenuItemId, RoleId) VALUES (@ObMenu, 1);
+    IF NOT EXISTS (SELECT 1 FROM dbo.MenuRolePermissions WHERE MenuItemId = @ObMenu AND RoleId = 2)
+        INSERT INTO dbo.MenuRolePermissions (MenuItemId, RoleId) VALUES (@ObMenu, 2);
+    IF NOT EXISTS (SELECT 1 FROM dbo.MenuRolePermissions WHERE MenuItemId = @ObMenu AND RoleId = 3)
+        INSERT INTO dbo.MenuRolePermissions (MenuItemId, RoleId) VALUES (@ObMenu, 3);
+END");
 }
 catch (Exception ex)
 {

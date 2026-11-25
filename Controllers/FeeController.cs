@@ -179,18 +179,20 @@ public class FeeController(IFeeService feeSvc, IParentAccessService parentAccess
     [HttpGet("preview/student")]
     [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> PreviewStudentFee(
-        [FromQuery] int studentId, [FromQuery] int feeStructureId, [FromQuery] int academicYearId)
+        [FromQuery] int studentId, [FromQuery] int feeStructureId, [FromQuery] int academicYearId, [FromQuery] int? month)
     {
-        try { return Ok(await feeSvc.PreviewStudentFeeAsync(studentId, feeStructureId, academicYearId)); }
+        if (month is < 1 or > 12) return BadRequest(new { error = "Month must be between 1 and 12." });
+        try { return Ok(await feeSvc.PreviewStudentFeeAsync(studentId, feeStructureId, academicYearId, month)); }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpGet("preview/bulk")]
     [Authorize(Roles = "superadmin,admin,principal")]
     public async Task<IActionResult> PreviewBulkAssign(
-        [FromQuery] int feeStructureId, [FromQuery] int classId, [FromQuery] int academicYearId)
+        [FromQuery] int feeStructureId, [FromQuery] int classId, [FromQuery] int academicYearId, [FromQuery] int? month)
     {
-        try { return Ok(await feeSvc.PreviewBulkAssignAsync(feeStructureId, classId, academicYearId)); }
+        if (month is < 1 or > 12) return BadRequest(new { error = "Month must be between 1 and 12." });
+        try { return Ok(await feeSvc.PreviewBulkAssignAsync(feeStructureId, classId, academicYearId, month)); }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
@@ -245,6 +247,47 @@ public class FeeController(IFeeService feeSvc, IParentAccessService parentAccess
         try { return Ok(await feeSvc.RecordPaymentAsync(dto, CurrentUserId)); }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
+
+    // ── Opening balances ─────────────────────────────────────────────────────
+
+    [HttpGet("opening-balances")]
+    [Authorize(Roles = "superadmin,admin,principal")]
+    public async Task<IActionResult> GetOpeningBalances(
+        [FromQuery] int? academicYearId, [FromQuery] int? classId, [FromQuery] int? studentId)
+        => Ok(await feeSvc.GetOpeningBalancesAsync(academicYearId, classId, studentId));
+
+    [HttpPost("opening-balances")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> CreateOpeningBalance([FromBody] CreateStudentOpeningBalanceDto dto)
+    {
+        if (dto.AmountPaid < 0 || dto.AmountPaid > dto.Amount)
+            return BadRequest(new { error = "Amount already paid cannot exceed the opening balance." });
+        try
+        {
+            var result = await feeSvc.CreateOpeningBalanceAsync(dto, CurrentUserId);
+            return CreatedAtAction(nameof(GetOpeningBalances), result);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPut("opening-balances/{id}")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> UpdateOpeningBalance(int id, [FromBody] UpdateStudentOpeningBalanceDto dto)
+    {
+        if (dto.AmountPaid < 0 || dto.AmountPaid > dto.Amount)
+            return BadRequest(new { error = "Amount already paid cannot exceed the opening balance." });
+        try
+        {
+            var result = await feeSvc.UpdateOpeningBalanceAsync(id, dto, CurrentUserId);
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpDelete("opening-balances/{id}")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> DeleteOpeningBalance(int id)
+        => await feeSvc.DeleteOpeningBalanceAsync(id) ? NoContent() : NotFound();
 
     // ── Reports ──────────────────────────────────────────────────────────────
 

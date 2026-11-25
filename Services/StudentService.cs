@@ -50,6 +50,7 @@ public class StudentService : IStudentService
     private readonly IHttpClientFactory _httpFactory;
     private readonly IWebHostEnvironment _env;
     private readonly IGuardianAutoLinkService _autoLink;
+    private readonly IFeeService _fees;
 
     public StudentService(
         AppDbContext db,
@@ -58,7 +59,8 @@ public class StudentService : IStudentService
         ITenantContext tenant,
         IHttpClientFactory httpFactory,
         IWebHostEnvironment env,
-        IGuardianAutoLinkService autoLink)
+        IGuardianAutoLinkService autoLink,
+        IFeeService fees)
     {
         _db          = db;
         _config      = config;
@@ -67,6 +69,7 @@ public class StudentService : IStudentService
         _httpFactory = httpFactory;
         _env         = env;
         _autoLink    = autoLink;
+        _fees        = fees;
     }
 
     // ── List ──────────────────────────────────────────────────────────────
@@ -472,6 +475,11 @@ public class StudentService : IStudentService
             }
             await _db.SaveChangesAsync();
         }
+
+        var submittedStructureIds = dto.Fees?.Select(f => f.FeeStructureId).ToHashSet()
+            ?? new HashSet<int>();
+        await _fees.AssignAdmissionFeesAsync(
+            student.StudentId, dto.ClassId, dto.AcademicYearId, admissionDate, createdBy, submittedStructureIds);
 
         await tx.CommitAsync();
 

@@ -35,8 +35,13 @@ public interface IFeeService
     Task<List<StudentFeeDto>> GetStudentFeesAsync(int? studentId, int? classId, int? academicYearId, string? status, int? instituteId = null, int? campusId = null);
     Task<StudentFeeDto?> GetStudentFeeByIdAsync(int id);
     Task<StudentFeeDto> CreateStudentFeeAsync(CreateStudentFeeDto dto, int userId);
-    Task<FeeGenerationPreviewDto> PreviewStudentFeeAsync(int studentId, int feeStructureId, int academicYearId);
-    Task<List<FeeGenerationPreviewDto>> PreviewBulkAssignAsync(int feeStructureId, int classId, int academicYearId);
+    Task<FeeGenerationPreviewDto> PreviewStudentFeeAsync(int studentId, int feeStructureId, int academicYearId, int? month = null);
+    Task<List<FeeGenerationPreviewDto>> PreviewBulkAssignAsync(int feeStructureId, int classId, int academicYearId, int? month = null);
+    /// <summary>
+    /// Creates One-Time and refundable-deposit invoices for a newly admitted student.
+    /// Structures already included in the admission form are skipped.
+    /// </summary>
+    Task AssignAdmissionFeesAsync(int studentId, int classId, int academicYearId, DateOnly dueDate, int userId, IReadOnlyCollection<int> skipStructureIds);
     Task<BulkAssignResultDto> BulkAssignFeeAsync(BulkAssignFeeDto dto, int userId);
     Task<StudentFeeDto?> UpdateStudentFeeAsync(int id, UpdateStudentFeeDto dto, int userId);
     Task<bool> DeleteStudentFeeAsync(int id);
@@ -47,6 +52,12 @@ public interface IFeeService
 
     // Reports
     Task<List<FeeReportRowDto>> GetFeeReportAsync(int academicYearId, int? classId);
+
+    // Opening balances
+    Task<List<StudentOpeningBalanceDto>> GetOpeningBalancesAsync(int? academicYearId, int? classId, int? studentId);
+    Task<StudentOpeningBalanceDto> CreateOpeningBalanceAsync(CreateStudentOpeningBalanceDto dto, int userId);
+    Task<StudentOpeningBalanceDto?> UpdateOpeningBalanceAsync(int id, UpdateStudentOpeningBalanceDto dto, int userId);
+    Task<bool> DeleteOpeningBalanceAsync(int id);
 }
 
 public class FeeService(AppDbContext db) : IFeeService
@@ -316,6 +327,73 @@ public class FeeService(AppDbContext db) : IFeeService
         return (Math.Min(total, baseFee), lines);
     }
 
+    /// <summary>
+    /// One-Time and refundable deposits are charged once per fee type.
+    /// Recurring and On-Demand fees are one invoice per billing month when a month is given.
+    /// </summary>
+    private async Task<bool> IsFeeAlreadyAssignedAsync(
+        int studentId, FeeStructure structure, int academicYearId, int? month, DateOnly? dueDate = null)
+    {
+        var onceEver = structure.FeeType.FeeCategory is FeeCategory.OneTime or FeeCategory.RefundableDeposit;
+        if (onceEver)
+            return await db.StudentFees.AnyAsync(sf =>
+                sf.StudentId == studentId && !sf.IsDeleted
+                && sf.FeeStructure.FeeTypeId == structure.FeeTypeId);
+
+        if (month is int m)
+            return await db.StudentFees.AnyAsync(sf =>
+                sf.StudentId == studentId && sf.FeeStructureId == structure.FeeStructureId
+                && sf.AcademicYearId == academicYearId && sf.FeeMonth == m && !sf.IsDeleted);
+
+        if (dueDate is DateOnly d)
+            return await db.StudentFees.AnyAsync(sf =>
+                sf.StudentId == studentId && sf.FeeStructureId == structure.FeeStructureId
+                && sf.AcademicYearId == academicYearId && sf.DueDate == d && !sf.IsDeleted);
+
+        return await db.StudentFees.AnyAsync(sf =>
+            sf.StudentId == studentId && sf.FeeStructureId == structure.FeeStructureId
+            && sf.AcademicYearId == academicYearId && !sf.IsDeleted);
+    }
+
+    public async Task AssignAdmissionFeesAsync(
+        int studentId, int classId, int academicYearId, DateOnly dueDate, int userId, IReadOnlyCollection<int> skipStructureIds)
+    {
+        var structures = await db.FeeStructures
+            .Include(fs => fs.FeeType)
+            .Where(fs => fs.ClassId == classId && fs.AcademicYearId == academicYearId
+                      && fs.IsActive && !fs.IsDeleted
+                      && fs.FeeType.IsActive && !fs.FeeType.IsDeleted
+                      && (fs.FeeType.FeeCategory == FeeCategory.OneTime
+                          || fs.FeeType.FeeCategory == FeeCategory.RefundableDeposit))
+            .ToListAsync();
+
+        var added = false;
+        foreach (var structure in structures)
+        {
+            if (skipStructureIds.Contains(structure.FeeStructureId)) continue;
+            if (await IsFeeAlreadyAssignedAsync(studentId, structure, academicYearId, null)) continue;
+
+            var (totalDiscount, _) = await ComputeDiscountAsync(
+                studentId, academicYearId, structure.Amount, structure.FeeType.FeeCategory);
+
+            db.StudentFees.Add(new StudentFee
+            {
+                StudentId = studentId,
+                FeeStructureId = structure.FeeStructureId,
+                AcademicYearId = academicYearId,
+                AmountDue = structure.Amount,
+                Discount = totalDiscount,
+                DueDate = dueDate,
+                FeeMonth = dueDate.Month,
+                Status = "Unpaid",
+                CreatedBy = userId
+            });
+            added = true;
+        }
+
+        if (added) await db.SaveChangesAsync();
+    }
+
     // ── Student Fees ─────────────────────────────────────────────────────────
 
     public async Task<List<StudentFeeDto>> GetStudentFeesAsync(int? studentId, int? classId, int? academicYearId, string? status, int? instituteId = null, int? campusId = null)
@@ -360,7 +438,7 @@ public class FeeService(AppDbContext db) : IFeeService
         return (await GetStudentFeeByIdAsync(sf.StudentFeeId))!;
     }
 
-    public async Task<FeeGenerationPreviewDto> PreviewStudentFeeAsync(int studentId, int feeStructureId, int academicYearId)
+    public async Task<FeeGenerationPreviewDto> PreviewStudentFeeAsync(int studentId, int feeStructureId, int academicYearId, int? month = null)
     {
         var student = await db.Students.FirstOrDefaultAsync(s => s.StudentId == studentId)
             ?? throw new InvalidOperationException("Student not found.");
@@ -368,9 +446,7 @@ public class FeeService(AppDbContext db) : IFeeService
                 .FirstOrDefaultAsync(fs => fs.FeeStructureId == feeStructureId && !fs.IsDeleted)
             ?? throw new InvalidOperationException("Fee structure not found.");
 
-        bool alreadyAssigned = await db.StudentFees.AnyAsync(sf =>
-            sf.StudentId == studentId && sf.FeeStructureId == feeStructureId
-            && sf.AcademicYearId == academicYearId && !sf.IsDeleted);
+        bool alreadyAssigned = await IsFeeAlreadyAssignedAsync(studentId, structure, academicYearId, month);
 
         var (totalDiscount, lines) = await ComputeDiscountAsync(studentId, academicYearId, structure.Amount, structure.FeeType.FeeCategory);
 
@@ -387,7 +463,7 @@ public class FeeService(AppDbContext db) : IFeeService
         };
     }
 
-    public async Task<List<FeeGenerationPreviewDto>> PreviewBulkAssignAsync(int feeStructureId, int classId, int academicYearId)
+    public async Task<List<FeeGenerationPreviewDto>> PreviewBulkAssignAsync(int feeStructureId, int classId, int academicYearId, int? month = null)
     {
         var structure = await db.FeeStructures.Include(fs => fs.FeeType)
                 .FirstOrDefaultAsync(fs => fs.FeeStructureId == feeStructureId && !fs.IsDeleted)
@@ -402,9 +478,7 @@ public class FeeService(AppDbContext db) : IFeeService
         var result = new List<FeeGenerationPreviewDto>();
         foreach (var enrollment in enrollments)
         {
-            bool alreadyAssigned = await db.StudentFees.AnyAsync(sf =>
-                sf.StudentId == enrollment.StudentId && sf.FeeStructureId == feeStructureId
-                && sf.AcademicYearId == academicYearId && !sf.IsDeleted);
+            bool alreadyAssigned = await IsFeeAlreadyAssignedAsync(enrollment.StudentId, structure, academicYearId, month);
 
             var (totalDiscount, lines) = await ComputeDiscountAsync(enrollment.StudentId, academicYearId, structure.Amount, structure.FeeType.FeeCategory);
 
@@ -435,25 +509,11 @@ public class FeeService(AppDbContext db) : IFeeService
                      && e.Status == "Active" && !e.IsDeleted && !e.Student.IsDeleted)
             .ToListAsync();
 
-        // OneTime / RefundableDeposit fees are charged once ever per student
-        // (matched by fee type across years); Recurring / OnDemand fees dedupe
-        // per billing month so each month gets its own challan.
-        var onceEver = structure.FeeType.FeeCategory is FeeCategory.OneTime or FeeCategory.RefundableDeposit;
-
         int createdCount = 0, skippedCount = 0;
         foreach (var enrollment in enrollments)
         {
-            bool exists = onceEver
-                ? await db.StudentFees.AnyAsync(sf =>
-                    sf.StudentId == enrollment.StudentId && !sf.IsDeleted
-                    && sf.FeeStructure.FeeTypeId == structure.FeeTypeId)
-                : dto.Month is int month
-                    ? await db.StudentFees.AnyAsync(sf =>
-                        sf.StudentId == enrollment.StudentId && sf.FeeStructureId == dto.FeeStructureId
-                        && sf.AcademicYearId == dto.AcademicYearId && sf.FeeMonth == month && !sf.IsDeleted)
-                    : await db.StudentFees.AnyAsync(sf =>
-                        sf.StudentId == enrollment.StudentId && sf.FeeStructureId == dto.FeeStructureId
-                        && sf.AcademicYearId == dto.AcademicYearId && sf.DueDate == dto.DueDate && !sf.IsDeleted);
+            bool exists = await IsFeeAlreadyAssignedAsync(
+                enrollment.StudentId, structure, dto.AcademicYearId, dto.Month, dto.Month is null ? dto.DueDate : null);
             if (exists) { skippedCount++; continue; }
 
             var (totalDiscount, _) = await ComputeDiscountAsync(enrollment.StudentId, dto.AcademicYearId, structure.Amount, structure.FeeType.FeeCategory);
@@ -575,7 +635,7 @@ public class FeeService(AppDbContext db) : IFeeService
             q = q.Where(sf => sf.Student.Enrollments.Any(e => e.ClassId == classId && e.Status == "Active" && !e.IsDeleted));
 
         var fees = await q.ToListAsync();
-        return fees
+        var rows = fees
             .GroupBy(sf => sf.StudentId)
             .Select(g =>
             {
@@ -597,7 +657,147 @@ public class FeeService(AppDbContext db) : IFeeService
                     PaidCount = g.Count(x => string.Equals(x.Status, "Paid", StringComparison.OrdinalIgnoreCase))
                 };
             })
-            .OrderBy(r => r.StudentName)
             .ToList();
+
+        var obQuery = db.StudentOpeningBalances
+            .Include(o => o.Student).ThenInclude(s => s.Enrollments).ThenInclude(e => e.Class)
+            .Where(o => o.AcademicYearId == academicYearId && !o.IsDeleted && !o.Student.IsDeleted);
+        if (classId.HasValue)
+            obQuery = obQuery.Where(o => o.Student.Enrollments.Any(e =>
+                e.ClassId == classId && e.AcademicYearId == academicYearId && e.Status == "Active" && !e.IsDeleted));
+
+        var byStudent = rows.ToDictionary(r => r.StudentId);
+        foreach (var ob in await obQuery.ToListAsync())
+        {
+            if (!byStudent.TryGetValue(ob.StudentId, out var row))
+            {
+                var ae = ob.Student.Enrollments?.FirstOrDefault(e =>
+                    e.AcademicYearId == academicYearId && e.Status == "Active" && !e.IsDeleted);
+                row = new FeeReportRowDto
+                {
+                    StudentId = ob.StudentId,
+                    StudentName = ob.Student.FirstName + " " + ob.Student.LastName,
+                    AdmissionNo = ob.Student.AdmissionNo,
+                    ClassName = ae?.Class != null ? $"{ae.Class.ClassName} {ae.Class.Section}" : ""
+                };
+                rows.Add(row);
+                byStudent[ob.StudentId] = row;
+            }
+            row.TotalDue += ob.Amount;
+            row.TotalPaid += ob.AmountPaid;
+            if (string.Equals(ob.Status, "Partial", StringComparison.OrdinalIgnoreCase)) row.PartialCount++;
+            else if (string.Equals(ob.Status, "Paid", StringComparison.OrdinalIgnoreCase)) row.PaidCount++;
+            else row.UnpaidCount++;
+        }
+
+        return rows.OrderBy(r => r.StudentName).ToList();
+    }
+
+    // ── Opening balances ─────────────────────────────────────────────────────
+
+    public async Task<List<StudentOpeningBalanceDto>> GetOpeningBalancesAsync(int? academicYearId, int? classId, int? studentId)
+    {
+        var q = db.StudentOpeningBalances
+            .Include(o => o.Student).ThenInclude(s => s.Enrollments).ThenInclude(e => e.Class)
+            .Include(o => o.AcademicYear)
+            .Where(o => !o.IsDeleted);
+        if (academicYearId.HasValue) q = q.Where(o => o.AcademicYearId == academicYearId);
+        if (studentId.HasValue)      q = q.Where(o => o.StudentId == studentId);
+        if (classId.HasValue)
+            q = q.Where(o => o.Student.Enrollments.Any(e =>
+                e.ClassId == classId && e.AcademicYearId == o.AcademicYearId && !e.IsDeleted && e.Status == "Active"));
+
+        var list = await q.OrderBy(o => o.Student.FirstName).ThenBy(o => o.Student.LastName).ToListAsync();
+        return list.Select(MapOpeningBalance).ToList();
+    }
+
+    public async Task<StudentOpeningBalanceDto> CreateOpeningBalanceAsync(CreateStudentOpeningBalanceDto dto, int userId)
+    {
+        if (dto.AmountPaid > dto.Amount)
+            throw new InvalidOperationException("Amount already paid cannot exceed the opening balance.");
+
+        var studentOk = await db.Students.AnyAsync(s => s.StudentId == dto.StudentId && !s.IsDeleted);
+        if (!studentOk) throw new InvalidOperationException("Student not found.");
+        var yearOk = await db.AcademicYears.AnyAsync(y => y.AcademicYearId == dto.AcademicYearId && !y.IsDeleted);
+        if (!yearOk) throw new InvalidOperationException("Academic year not found.");
+
+        var duplicate = await db.StudentOpeningBalances.AnyAsync(o =>
+            o.StudentId == dto.StudentId && o.AcademicYearId == dto.AcademicYearId && !o.IsDeleted);
+        if (duplicate)
+            throw new InvalidOperationException("This student already has an opening balance for the selected year.");
+
+        var row = new StudentOpeningBalance
+        {
+            StudentId = dto.StudentId,
+            AcademicYearId = dto.AcademicYearId,
+            Amount = dto.Amount,
+            AmountPaid = dto.AmountPaid,
+            AsOfDate = dto.AsOfDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            Remarks = string.IsNullOrWhiteSpace(dto.Remarks) ? null : dto.Remarks.Trim(),
+            Status = OpeningBalanceStatus(dto.Amount, dto.AmountPaid),
+            CreatedBy = userId
+        };
+        db.StudentOpeningBalances.Add(row);
+        await db.SaveChangesAsync();
+        return (await GetOpeningBalancesAsync(dto.AcademicYearId, null, dto.StudentId))
+            .First(o => o.StudentOpeningBalanceId == row.StudentOpeningBalanceId);
+    }
+
+    public async Task<StudentOpeningBalanceDto?> UpdateOpeningBalanceAsync(int id, UpdateStudentOpeningBalanceDto dto, int userId)
+    {
+        if (dto.AmountPaid > dto.Amount)
+            throw new InvalidOperationException("Amount already paid cannot exceed the opening balance.");
+
+        var row = await db.StudentOpeningBalances.FirstOrDefaultAsync(o => o.StudentOpeningBalanceId == id && !o.IsDeleted);
+        if (row is null) return null;
+        row.Amount = dto.Amount;
+        row.AmountPaid = dto.AmountPaid;
+        row.AsOfDate = dto.AsOfDate;
+        row.Remarks = string.IsNullOrWhiteSpace(dto.Remarks) ? null : dto.Remarks.Trim();
+        row.Status = OpeningBalanceStatus(dto.Amount, dto.AmountPaid);
+        row.UpdatedBy = userId;
+        row.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return (await GetOpeningBalancesAsync(row.AcademicYearId, null, row.StudentId))
+            .FirstOrDefault(o => o.StudentOpeningBalanceId == id);
+    }
+
+    public async Task<bool> DeleteOpeningBalanceAsync(int id)
+    {
+        var row = await db.StudentOpeningBalances.FirstOrDefaultAsync(o => o.StudentOpeningBalanceId == id && !o.IsDeleted);
+        if (row is null) return false;
+        row.IsDeleted = true;
+        row.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    private static string OpeningBalanceStatus(decimal amount, decimal paid)
+    {
+        if (paid <= 0) return "Unpaid";
+        if (paid >= amount) return "Paid";
+        return "Partial";
+    }
+
+    private static StudentOpeningBalanceDto MapOpeningBalance(StudentOpeningBalance ob)
+    {
+        var ae = ob.Student.Enrollments?.FirstOrDefault(e =>
+                e.AcademicYearId == ob.AcademicYearId && !e.IsDeleted && e.Status == "Active")
+            ?? ob.Student.Enrollments?.FirstOrDefault(e => e.Status == "Active" && !e.IsDeleted);
+        return new StudentOpeningBalanceDto
+        {
+            StudentOpeningBalanceId = ob.StudentOpeningBalanceId,
+            StudentId = ob.StudentId,
+            StudentName = ob.Student.FirstName + " " + ob.Student.LastName,
+            AdmissionNo = ob.Student.AdmissionNo,
+            ClassName = ae?.Class != null ? $"{ae.Class.ClassName} {ae.Class.Section}".Trim() : "",
+            AcademicYearId = ob.AcademicYearId,
+            YearLabel = ob.AcademicYear?.YearLabel ?? "",
+            Amount = ob.Amount,
+            AmountPaid = ob.AmountPaid,
+            AsOfDate = ob.AsOfDate,
+            Status = ob.Status,
+            Remarks = ob.Remarks
+        };
     }
 }

@@ -60,7 +60,77 @@ public class DashboardService : IDashboardService
             TotalStudents = totalStudents,
             MaleCount = maleCount,
             FemaleCount = femaleCount,
-            ByClass = byClass
+            ByClass = byClass,
+            WeeklyAttendance = await GetWeeklyAttendanceAsync()
         };
     }
+
+    /// <summary>
+    /// Distinct students per day for the last 7 days in Pakistan time.
+    /// Attendance is stored per period, so a student is counted once:
+    /// Present or Late wins over Absent; Leave-only is not plotted.
+    /// </summary>
+    private async Task<List<DashboardAttendanceDayDto>> GetWeeklyAttendanceAsync()
+    {
+        var today = PakistanToday();
+        var from = today.AddDays(-6);
+
+        var marks = await _db.Attendances.AsNoTracking()
+            .Where(a => a.Date >= from && a.Date <= today)
+            .Select(a => new { a.Date, a.StudentId, a.Status })
+            .ToListAsync();
+
+        var days = new List<DashboardAttendanceDayDto>(7);
+        for (var date = from; date <= today; date = date.AddDays(1))
+        {
+            var present = 0;
+            var absent = 0;
+            foreach (var student in marks.Where(m => m.Date == date).GroupBy(m => m.StudentId))
+            {
+                var came = student.Any(m =>
+                    m.Status.Equals("Present", StringComparison.OrdinalIgnoreCase) ||
+                    m.Status.Equals("Late", StringComparison.OrdinalIgnoreCase));
+                var away = student.Any(m =>
+                    m.Status.Equals("Absent", StringComparison.OrdinalIgnoreCase));
+                if (came) present++;
+                else if (away) absent++;
+            }
+
+            days.Add(new DashboardAttendanceDayDto
+            {
+                Day = Weekday(date.DayOfWeek),
+                Date = date.ToString("yyyy-MM-dd"),
+                Present = present,
+                Absent = absent
+            });
+        }
+
+        return days;
+    }
+
+    private static DateOnly PakistanToday()
+    {
+        TimeZoneInfo tz;
+        try
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById("Pakistan Standard Time");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Karachi");
+        }
+
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+    }
+
+    private static string Weekday(DayOfWeek day) => day switch
+    {
+        DayOfWeek.Monday => "Mon",
+        DayOfWeek.Tuesday => "Tue",
+        DayOfWeek.Wednesday => "Wed",
+        DayOfWeek.Thursday => "Thu",
+        DayOfWeek.Friday => "Fri",
+        DayOfWeek.Saturday => "Sat",
+        _ => "Sun"
+    };
 }
