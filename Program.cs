@@ -667,8 +667,19 @@ BEGIN
             AND fs.AcademicYearId = y.AcademicYearId AND fs.IsDeleted = 0);
 END");
 
-    await photoDb.Database.ExecuteSqlRawAsync(@"
-SET QUOTED_IDENTIFIER ON;
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Users.PhotoFileId ensure warning: {ex.Message}");
+}
+
+// Own batch: an earlier ensure failure must not skip the Student OB menu.
+try
+{
+    using var obScope = app.Services.CreateScope();
+    var obDb = obScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    await obDb.Database.ExecuteSqlRawAsync(@"
 IF OBJECT_ID(N'dbo.StudentOpeningBalances', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.StudentOpeningBalances (
@@ -690,16 +701,31 @@ BEGIN
         CONSTRAINT FK_StudentOpeningBalances_Students FOREIGN KEY (StudentId) REFERENCES dbo.Students (StudentId),
         CONSTRAINT FK_StudentOpeningBalances_AcademicYears FOREIGN KEY (AcademicYearId) REFERENCES dbo.AcademicYears (AcademicYearId)
     );
+END");
+
+    await obDb.Database.ExecuteSqlRawAsync(@"
+SET QUOTED_IDENTIFIER ON;
+IF OBJECT_ID(N'dbo.StudentOpeningBalances', N'U') IS NOT NULL
+AND NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = N'IX_StudentOpeningBalances_Student_Year'
+      AND object_id = OBJECT_ID(N'dbo.StudentOpeningBalances'))
     CREATE UNIQUE INDEX IX_StudentOpeningBalances_Student_Year
         ON dbo.StudentOpeningBalances (StudentId, AcademicYearId)
-        WHERE IsDeleted = 0;
-END
+        WHERE IsDeleted = 0;");
 
-IF NOT EXISTS (SELECT 1 FROM dbo.MenuItems WHERE RouteUrl = N'/fees/opening-balance' AND IsDeleted = 0)
+    await obDb.Database.ExecuteSqlRawAsync(@"
+DECLARE @FeesParent INT = (
+    SELECT TOP 1 MenuItemId FROM dbo.MenuItems
+    WHERE IsDeleted = 0 AND ParentId IS NULL AND Title = N'Fees'
+    ORDER BY MenuItemId);
+
+IF @FeesParent IS NOT NULL
+AND NOT EXISTS (SELECT 1 FROM dbo.MenuItems WHERE RouteUrl = N'/fees/opening-balance' AND IsDeleted = 0)
     INSERT INTO dbo.MenuItems
         (ParentId, Title, Icon, RouteUrl, SortOrder, IsActive, IsDeleted, CreatedAt)
     VALUES
-        (20, N'Student OB', N'account_balance_wallet', N'/fees/opening-balance', 80, 1, 0, SYSUTCDATETIME());
+        (@FeesParent, N'Student OB', N'account_balance_wallet', N'/fees/opening-balance', 80, 1, 0, SYSUTCDATETIME());
 
 DECLARE @ObMenu INT = (
     SELECT TOP 1 MenuItemId FROM dbo.MenuItems
@@ -717,7 +743,7 @@ END");
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"Users.PhotoFileId ensure warning: {ex.Message}");
+    Console.WriteLine($"Student opening balance ensure warning: {ex.Message}");
 }
 
 // ── Background Database initialization (non-blocking for fast IIS startup) ────
